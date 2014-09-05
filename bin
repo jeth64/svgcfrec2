@@ -1,0 +1,79 @@
+(do (setv matches (list-comp (zipmap [:cmd :nrs] (.groups it))
+                              [it (finditer "([MmCcSsLl])([^A-DF-Za-df-z]+)" str)]))
+    (loop [[points []]
+           [i 0]]
+          (if (< i (len commands))
+            (let [[nr-str (-> (get matches :nrs) (.replace  "-" " -")
+                              (.replace  "e -" "e-") (.strip))]
+                  [numbers (map float (remove empty? (split " |," nr-str)))]
+                  [pts (partition 2 2 numbers)]
+                  [offset (last (last points))]]
+              (cond [(= (.upper (get matches :cmd)) "M")
+                     (recur (.extend points (lines2beziers (ptlist2matrix (rest pts) (first pts)
+                                                                          1 (.isupper cmd))))
+                            (first pts) (inc i))]
+                    [(= (.upper (get matches :cmd)) "L")
+                     (recur (.extend points (lines2beziers (ptlist2matrix pts offset
+                                                                          1 (.isupper cmd))))
+                            offset (inc 1))]
+                    [(= (.upper (get matches :cmd)) "C")
+                     (recur
+                                              (ptlist2matrix pts offset (int 3) (.isupper cmd)))]
+                    [(= (.upper (get matches :cmd)) "Z")
+                     (recur (lines2beziers [[offset (first (first points))]]))]
+                    [True (raise (Exception "Unknown path command"))])
+
+              )
+            points)
+          ))
+
+
+
+          (let [
+           [cmd (.group it (int 1))]
+           [nr-str (-> (.group it (int 2)) (.replace  "-" " -") (.replace  "e -" "e-") (.strip))]
+           [numbers (map float (remove empty? (split " |," nr-str)))]
+           [pts (partition 2 2 numbers)]
+           [new-points (cond [(= (.upper cmd) "M")
+                              (do (setv offset (first pts))
+                                  (lines2beziers (ptlist2matrix (rest pts) offset 1 (.isupper cmd))))]
+                             [(= (.upper cmd) "L") (lines2beziers
+                                                    (ptlist2matrix pts offset 1 (.isupper cmd)))]
+                             [(= (.upper cmd) "H") (lines2beziers
+                                                    (ptlist2matrix (zip numbers (repeat (second offset)))
+                                                                   offset 1 (.isupper cmd)))]
+                             [(= (.upper cmd) "V") (lines2beziers
+                                                    (ptlist2matrix (zip (repeat (first offset)) numbers)
+                                                                   offset 1 (.isupper cmd)))]
+                             [(= (.upper cmd) "C") (do (print "c") (print offset)
+                                                       (ptlist2matrix pts offset (int 3) (.isupper cmd)))]
+                             [(= (.upper cmd) "S") (add-first-ctrl-pts
+                                                    points (ptlist2matrix pts offset 2 (.isupper cmd)))]
+                             [(= (.upper cmd) "Q") (elevate-bezier (ptlist2matrix pts offset 2 (.isupper cmd)))]
+                             [(= (.upper cmd) "T") (elevate-bezier
+                                                    (add-first-ctrl-pts
+                                                     points (ptlist2matrix pts offset 1 (.isupper cmd))))]
+                             [(= (.upper cmd) "Z") (lines2beziers [[offset (first (first points))]])]
+                             [True (raise (Exception "Unknown path command"))])]]
+       (unless (empty? new-points)
+         (setv offset (last (last new-points)))
+         (.extend points new-points)))
+
+
+                                ;     (catch [e Exception] (print "exception") ;;(warn (.join "" ["Error while interpreting path string part '" (.join "" (.groups it)) "' - this part will be ignored\n" (.args e)]))
+                                ;     )
+
+                                (defn reductions [f coll &optional init]
+  (print f coll)
+  (loop [[res [(if (none? init) (first coll) init)]]
+         [acc (if (none? init) (rest coll) coll)]]
+        (do (print acc)
+         (if (empty? acc)
+           (do (.reverse res) res)
+           (recur (cons (f (first res) (first acc)) res) (rest acc))))))
+(defn reductions [f coll]
+  (loop [[res [(first coll)]]
+         [acc (rest coll)]]
+        (if (empty? acc)
+          (do (.reverse res) res)
+          (recur (cons (f (first res) (first acc)) res) (rest acc)))))
