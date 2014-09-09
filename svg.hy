@@ -106,3 +106,18 @@
       [Cs (.join " " (map (fn [part] (+ "C" (.join " " (rest part))))
                           ptstr-matrix))]]
     (+ M " " Cs)))
+
+(defn add-path [parent attribs path] ;; side-effects
+  (.update attribs {"d" (matrix2path path)})
+  (SubElement parent "ns0:path" attribs))
+
+(defn add-line [parent attribs line] ;; side-effects
+  (.update attribs (zip ["x1" "y1" "x2" "y2"] (map str (flatten line))))
+  (SubElement parent "ns0:line" attribs))
+
+(defn add-circle [parent attribs point]
+  (.update attribs (zip ["cx" "cy"] (map str point)))
+  (SubElement parent "ns0:circle" attribs))
+
+(defn svg? [root]
+  (= (.join "" (drop (- (len root.tag) 3) root.tag)) "svg"))
