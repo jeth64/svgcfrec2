@@ -32,7 +32,6 @@
   (bezier-fit (vstack (list (map (fn [Cs] (eval-cubics (linspace 0 1 4 True) Cs))
                                  cubic-beziers)))))
 
-;;(setv v (array [[0 1] [2 3] [4 5] [6 7]]))
 
 
 ;; Degree reduction: if needed needs to be corrected
@@ -79,17 +78,17 @@
 
 
 (defn de-casteljau-rec [t control-points]
-  (let [[coefs (array (last control-points))]]
+  (let [[coefs (array (last (list control-points)))]]
     (if (< (len coefs) 2)
       control-points
       (+ control-points
          (de-casteljau-rec t [(list (map (fn [Pi Pinci] (+ (* Pi (- 1 t)) (* Pinci t)))
                                          (butlast coefs) (rest coefs)))])))))
 
-(defn de-casteljau-split [t control-points];; test
-  (let [[c-point-list (de-casteljau-rec t [control-points])]]
-    [(array (map first c-point-list))
-     (array (list (reversed (map last c-point-list))))]))
+(defn de-casteljau-split [t control-points]
+  (let [[c-point-list (de-casteljau-rec t [(list control-points)])]]
+    [(array (list (map first c-point-list)))
+     (array (list (reversed (list (map last c-point-list)))))]))
 
 (defn de-casteljau [t control-points]
   (let [[c-point-list (de-casteljau-rec t [control-points])]]
@@ -115,9 +114,8 @@
   (/ (dot (apply sub (take 2 segment1)) (apply sub (drop 2 segment2)))
      (* (linalg.norm segment1) (linalg.norm segment2))))
 
-
 ;;
-;; high-level functions to manipulate poly-beziers
+;; path manipulation routines
 ;;
 
 (defn transition-type [part1 part2]
@@ -225,10 +223,6 @@
 
                                 ;array ( [[  5.42957003,  28.13219065],[  8.19975053,  16.10221783],[  2.30515485,  40.4036828 ],[-28.54816996,  31.52851723],[-27.50015975,  21.76728318],[-44.97547529,  35.59957164]])
 
-
-;;
-;; path manipulation routines
-;;
 
 ;; TODO: put here: merge, split etc
 
