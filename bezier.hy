@@ -19,9 +19,9 @@
   (dot (transpose (pt-coeffs ts)) (array (list control-points)) ))
 
 (defn bezier-fit [ordered-pts]
-  (let [[path-lengths (+ [0] (reductions add (map dist
-                                                  (butlast ordered-pts)
-                                                 (rest ordered-pts))))]
+  (let [[path-lengths (+ [0] (reductions add (list (map dist
+                                                        (butlast ordered-pts)
+                                                        (rest ordered-pts)))))]
         [ts (array (list (map (fn [x] (/ x (last path-lengths))) path-lengths)))]
         [XT (pt-coeffs ts)]
         [control-points (dot (linalg.inv (dot XT (transpose XT)))
@@ -37,14 +37,14 @@
 ;; Degree reduction: if needed needs to be corrected
 
 (defn weighted-sum [points weights]
-  (sum (array (map mul points weights))) 0)
+  (sum (array (list (map mul points weights)))) 0)
 
 (defn approx-points [points n]
-  (rest (reductions (fn [P iQ]
-                      (weighted-sum [(second iQ) P]
-                                    [(/ n (- n (first iQ))) (/ (- (first iQ)) (- n (first iQ)))]))
-                    [0 0]
-                    (transpose [(range n) points]))))
+  (list (rest (reductions (fn [P iQ]
+                            (weighted-sum [(second iQ) P]
+                                          [(/ n (- n (first iQ))) (/ (- (first iQ)) (- n (first iQ)))]))
+                          [0 0]
+                          (transpose [(range n) points])))))
 
 (defn factor [i n]
   (* (Math/pow 2 (- 1 (* 2 n)))
@@ -67,9 +67,9 @@
   (let [[n (dec (count control-points))]
         [Pr (approx-points control-points n)]
         [Pl (reverse (approx-points (reverse control-points) n))]]
-    (map (fn [x y z] (let [[lmbd (factor z n)]]
-                       (weighted-sum [x y] [(- 1 lmbd) lmbd])))
-         Pr Pl (range n))))
+    (list (map (fn [x y z] (let [[lmbd (factor z n)]]
+                             (weighted-sum [x y] [(- 1 lmbd) lmbd])))
+               Pr Pl (range n)))))
 
 
 ;;
@@ -107,7 +107,7 @@
                 (+ (get point :p2) (get point :p3)) ]) 2)))
 
 (defn bezier-curvature [segment]
-  (/ (reduce add (map dist (butlast segment) (rest segment)))
+  (/ (reduce add (list (map dist (butlast segment) (rest segment))))
      (dist (first segment) (last segment))))
 
 (defn bezier-curvature2 [segment1 segment2]
@@ -150,12 +150,12 @@
 (defn try-merge [parts]
   (if (= (len parts) 1)
     parts
-    (map merge-beziers (partition-at-edge parts))))
+    (list (map merge-beziers (partition-at-edge parts)))))
 
 
 (defn get-merged-convex [path]
-  (let [[convex-segments (reduce add (map (fn [x] (try-merge (list (second x))))
-                                          (filter first (groupby path convex?))) [])]]
+  (let [[convex-segments (reduce add (list (map (fn [x] (try-merge (list (second x))))
+                                                (filter first (groupby path convex?)))) [])]]
     (if (< (dist (first (first convex-segments))
                  (last (last convex-segments)))
            0.5)
@@ -168,38 +168,38 @@
 ;; merge convex segments if they don't meet on an edge
 
 (defn merge-and-filter [parts]
-  (print parts)
+ ; (print parts)
   (if (< (len parts) 2)
     parts
-    (map (fn [x y] (do ;; (if (< (dist (last x) (first y)) 0.5) (print "no edge?"(no-edge? x y) "\ndot " (bezier-curvature2 x y)))
-                    (if (and (< (dist (last x) (first y)) 0.5)
-                             (no-edge? x y)
-                             (< (bezier-curvature2 x y) 0))
-                       (merge-beziers [x y])
-                       [])))
-         parts
-         (+ (rest parts) [(first parts)]))))
+    (list (map (fn [x y] (do ;; (if (< (dist (last x) (first y)) 0.5) (print "no edge?"(no-edge? x y) "\ndot " (bezier-curvature2 x y)))
+                          (if (and (< (dist (last x) (first y)) 0.5)
+                                   (no-edge? x y)
+                                   (< (bezier-curvature2 x y) 0))
+                            (merge-beziers [x y])
+                            [])))
+               parts
+               (+ (list (rest parts)) [(first parts)])))))
 
 (defn merge-and-filter2 [segs]
   (let [[grouped (groupby path (fn [x] (< (bezier-curvature2 x x)
                                           0)))]
-        [parts (map (fn [x] (list (second x))) (remove first grouped))]
-        [curved (map (fn [x] (list (second x))) (filter first grouped))]]
+        [parts (list (map (fn [x] (list (second x))) (remove first grouped)))]
+        [curved (list (map (fn [x] (list (second x))) (filter first grouped)))]]
     (if (= (len parts) 1)
       parts
-      (map (fn [x y] (do ;(if (< (dist (last x) (first y)) 0.5) (print "no edge?"(no-edge? x y) "dot " (bezier-curvature2 x y)))
-                         (if (and (< (dist (last x) (first y)) 0.5)
-                                  (no-edge? x y)
-                                  (< (bezier-curvature2 x y) 0))
-                           (merge-beziers [x y])
-                           [])))
-           parts
-           (+ (rest parts) [(first parts)])))))
+      (list (map (fn [x y] (do ;(if (< (dist (last x) (first y)) 0.5) (print "no edge?"(no-edge? x y) "dot " (bezier-curvature2 x y)))
+                            (if (and (< (dist (last x) (first y)) 0.5)
+                                     (no-edge? x y)
+                                     (< (bezier-curvature2 x y) 0))
+                              (merge-beziers [x y])
+                              [])))
+                 parts
+                 (+ (list (rest parts)) [(first parts)]))))))
 
 (defn try-merge2 [parts]
   (let [[last-part (first parts)]
         [l []]]
-    (for [part (rest parts)]
+    (for [part (list (rest parts))]
 
       (if (no-edge? part last-part)
         (.append (last l) (last consecutive))
@@ -208,12 +208,12 @@
   )
 
 (defn merge-consecutive [a b]
-  (map (fn [x] (try-merge2 (list (second x))))
-       (filter first (groupby path convex?))))
+  (list (map (fn [x] (try-merge2 (list (second x))))
+             (filter first (groupby path convex?)))))
 
 
 (defn get-merged-convex2 [path]
-  (let [[convex-segments (map list (filter convex? path))]]
+  (let [[convex-segments (list (map list (filter convex? path)))]]
 ;    (print (merge-and-filter convex-segments))
  ;   (print (array (remove empty? (merge-and-filter convex-segments))))
     (remove empty? (merge-and-filter convex-segments))
@@ -236,15 +236,15 @@
   (if (< (cond [(= cut-off-attribute "distance")
                 (dist (first segment) (last segment))]
                [(= cut-off-attribute "pathlength")
-                (reduce add (map dist (butlast segment) (rest segment)))]
+                (reduce add (list (map dist (butlast segment) (rest segment))))]
                [(= cut-off-attribute "curvature")
-                (/ (reduce add (map dist (butlast segment) (rest segment)))
+                (/ (reduce add (list (map dist (butlast segment) (rest segment))))
                    (dist (first segment) (last segment)))])
          t)
     [segment]
     (let [[segments (de-casteljau-split 0.5 segment)]
-          [new-segments (map (fn [s] (split-segment-to cut-off-attribute t s)) segments)]]
+          [new-segments (list (map (fn [s] (split-segment-to cut-off-attribute t s)) segments))]]
       (apply add new-segments))))
 
 (defn split-segments-to [cut-off-attribute t path]
-  (array (reduce add (map (fn [x] (split-segment-to cut-off-attribute t x)) path))))
+  (array (reduce add (list (map (fn [x] (split-segment-to cut-off-attribute t x)) path)))))

@@ -35,34 +35,35 @@
     (array [(+ midpt (/ rotated-dir 2))
             (- midpt (/ rotated-dir 2))])))
 
-(defn rotation-matrix [radian]
-  (let [[c (cos radian)]
-        [s (sin radian)]]
+(defn rotation-matrix [angle]
+  "Return rotation matrix of angle given in radian."
+  (let [[c (cos angle)]
+        [s (sin angle)]]
     (array [[c s] [(- s) c]])))
 
-(defn rotate [r vectors]
-  "Rotate all vectors in list clockwise ('r' = radian)"
-  (dot vectors (transpose (rotation-matrix r))))
+(defn rotate [angle vectors]
+  "Rotate all vectors of list clockwise (angle in radian)"
+  (dot vectors (transpose (rotation-matrix angle))))
 
 (defn bounding-box-v [points dir-vec]
 ;; "Returns vertices of rotated rectangle containing given points.
 ;;   The direction is given by a normalized vector "
-  (let [[degree (arccos (dot [0 1] dir-vec))]
+  (let [[angle (arccos (dot [0 1] dir-vec))]
         [p0 (mean points)]
         [normalized (- points p0)]
-        [rotated (rotate degree normalized)]]
-    (+ (rotate (- degree)
+        [rotated (rotate angle normalized)]]
+    (+ (rotate (- angle)
                (list-comp i [i (apply it.product (transpose [(amin rotated 0)
                                                              (amax rotated 0)]))]))
        p0)))
 
-(defn bounding-box [points angle]
+(defn bounding-box [points degree]
   "Returns vertices of rotated rectangle containing given points"
   (let [[p0 (mean points)]
         [whitened (- points p0)]
-        [degree (degree angle)]
-        [rotated (rotate degree whitened)]]
-    (+ (rotate (- degree)
+        [angle (radians degree)]
+        [rotated (rotate angle whitened)]]
+    (+ (rotate (- angle)
                (list-comp i [i (apply it.product (transpose [(amin rotated 0)
                                                              (amax rotated 0)]))]))
        p0)))
@@ -70,12 +71,11 @@
 (defn points-in-triangle? [vertices points]
   "States if all given points are within the triangle defined by the vertices"
   (if (all (isfinite points))
-    (let [[v-dirs (map sub vertices (roll vertices 1))]
-          [v2-dirs (map sub vertices (roll vertices 2))]
-          [p-dirs (map (fn [z] (map (fn [x] (sub z x)) points)) vertices)]
-          ]
-      (all (map (fn [x y z] (map (fn [p] (= (pos? (cross x y))
-                                            (pos? (cross x p))))
-                                 z))
-                v-dirs v2-dirs p-dirs)))
+    (let [[v-dirs (list (map sub vertices (roll vertices 1)))]
+          [v2-dirs (list (map sub vertices (roll vertices 2)))]
+          [p-dirs (list (map (fn [z] (list (map (fn [x] (sub z x)) points))) vertices))]]
+      (all (list (map (fn [x y z] (list (map (fn [p] (= (pos? (cross x y))
+                                                        (pos? (cross x p))))
+                                             z)))
+                      v-dirs v2-dirs p-dirs))))
     False))

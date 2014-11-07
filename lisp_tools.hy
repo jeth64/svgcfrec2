@@ -17,7 +17,7 @@
   res)
 
 (defn reductions [f coll &optional init]
-  (let [[l (if (none? init) coll (cons init coll))]
+  (let [[l (if (none? init) (list coll) (cons init (list coll)))]
         [res [(first l)]]]
     (for [item (rest l)]
       (.append res (f (last res) item)))
@@ -31,8 +31,8 @@
            (for [x coll] (yield x))])))
 
 (defn group-by [labels coll] ;; not like clojure
- (dict (map (fn [x] [(first x) (map second (second x))])
-            (groupby (sorted (zip labels coll) None first) first))))
+  (dict (list (map (fn [x] [(first x) (list (map second (second x)))])
+                   (groupby (sorted (zip labels coll) None first) first)))))
 
 (defn partition-by [cmp coll] ;; not like clojure
   (setv prev (first coll))
