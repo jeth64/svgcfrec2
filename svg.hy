@@ -6,7 +6,7 @@
         [re [finditer split match]]
         [operator [add sub]]
         [warnings [warn]]
-        [lisp-tools [*]])
+        [tools [*]])
 
 (defn list-add [l1 l2] (list (map add l1 l2)))
 

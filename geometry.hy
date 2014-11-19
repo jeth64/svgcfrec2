@@ -2,7 +2,7 @@
         [numpy.linalg [solve LinAlgError]]
         [operator [sub]]
         [itertools :as it]
-        [lisp-tools [*]])
+        [tools [*]])
 
 
 (defn stretch [line factor]

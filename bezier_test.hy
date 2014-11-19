@@ -1,6 +1,6 @@
 (import [numpy [*]]
         [bezier [*]]
-        [lisp-tools [*]])
+        [tools [*]])
 
 
 (defn test_pt-coeffs []

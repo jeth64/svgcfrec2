@@ -1,4 +1,4 @@
-(import [lisp-tools [*]]
+(import [tools [*]]
         [numpy [*]]
         [operator [add]])
 

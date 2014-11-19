@@ -3,7 +3,7 @@
         [bezier [*]]
         [modulo [*]]
         [geometry [*]]
-        [lisp-tools [*]]
+        [tools [*]]
         [numpy [*]]
         [itertools [groupby combinations]]
         [itertools :as it]
@@ -92,8 +92,8 @@
   "Get curve gradients of nodes in path"
   (let [[node-dirs (list (map (fn [segment] (ext-normalize (apply sub (slice segment 0 None 3))))
                               path))]
-    ;    [b (print (array node-dirs))]
-      ;  [a (print (mean [node-dirs (roll node-dirs 1)] 0))]
+        [b (print (array node-dirs))]
+        [a (print (mean [node-dirs (roll node-dirs 1)] 0))]
         ]
     (mean [node-dirs (roll node-dirs 1)] 0)))
 
@@ -104,11 +104,7 @@
 (defn get-node-dirs [path]
   "Get curve gradients of nodes in path, as angle to x-axis"
   (let [[node-dirs (list (map (fn [segment] (angle (apply sub (slice segment 0 None 3))))
-                              path))]
-      ;  [b (print (array node-dirs))]
-     ;   [a (print (map (fn [x y] (mod-mean 180 x y)) node-dirs (roll node-dirs 1)))]
-      ;  [a (print (mean [node-dirs (roll node-dirs 1)] 0))]
-        ]
+                              path))]]
     (list (map (fn [x y] (mod-mean 180 x y)) node-dirs (roll node-dirs 1)))))
 
 (defn find-thinnings [path max-dist min-neigh-dist]
@@ -149,7 +145,7 @@
         [d (squareform (pdist (array nodes)))]
 
         [inds (- (tile (range n) [n 1])
-                 (transpose (tile (range n) [n 1])))]
+                 (transpose (tile (range n) [n 1])))] ;schwachsinn
 
         [graph (& (< d max-dist) (< min-neigh-dist inds) (< inds (- n min-neigh-dist)))]
         [cc (connected_components graph False)]
@@ -160,8 +156,7 @@
     ))
 
 
-(defn choose-pts [coll xs ys];;working? necessary? ;; strange behaviour of get with array, 'product' not unique
-  (get coll (.tolist (.transpose (array (list (it.product xs ys)))))))
+
 
 (defn get-wedge [index-pairs inds isecs vertices]
   (let [[gisecs (list (map (fn [x] (get isecs x)) index-pairs))]
@@ -182,3 +177,44 @@
         [right [(second edge)]]]
     (for [d (range 3 (inc (/ n-nodes 2)))]
       (get distance-edge-map d))))
+
+
+;; min-node dist is minimum distance between neighbouring nodes
+(defn find-thinnings-new [path max-dist];test
+  (let [
+        [nodes (list (map first path))]
+       ; [a (print "n" (array nodes))]
+        [node-dirs (get-node-dirs path)]
+
+    ;    [a (print "n-d" node-dirs)]
+        [n (len nodes)]
+
+        [node-dists (pdist (array nodes))]
+        [d (squareform node-dists)]
+
+        [min-node-dist (min node-dists)]
+    ;    [a (print "min-node-dist" min-node-dist)]
+     ;   [a (print "max-node-dist" (max node-dists))]
+
+        [mid-el (int (ceil (/ n 2)))]
+        [half-range (range 1 mid-el)]
+        [first-row (list (if (even? n)
+                           (concat [0] half-range [mid-el] (reversed half-range))
+                           (concat [0] half-range (reversed half-range))))]
+        [ind-dist (array (list (map (fn [x] (roll (list first-row) x))
+                                    (range n))))]
+     ;   [a (print ind-dist)]
+   ;     [a (print "ishape" (shape ind-dist) "d" (shape d))]
+
+        [trace-dist (* ind-dist min-node-dist)]
+        [limit (choose (> trace-dist max-dist) [trace-dist max-dist])]
+        [graph (< d limit) ]
+
+;        [b (print "graph" graph)]
+        [cc (connected_components graph False)]
+        [cc2 (list (filter (fn [y] (> (len y) 1))
+                           (.values (group-by (second cc) (range 50))))) ]
+
+        [dirs (get-directions cc2 node-dirs nodes)]]
+    dirs
+    ))

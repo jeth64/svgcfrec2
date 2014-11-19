@@ -43,3 +43,6 @@
       (.append (last l) item))
     (setv prev item))
   l)
+
+(defn make-set [pairings]
+  (set (list (map (fn [x] (tuple (sort x))) pairings))))

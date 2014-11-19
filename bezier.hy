@@ -1,8 +1,8 @@
 (import [numpy [*]]
         [scipy.misc [comb]]
         [operator [sub mul add]]
-        [lisp-tools [*]]
-        [itertools [groupby]])
+        [tools [*]]
+        [itertools :as it])
 
 
 (defn dist [a b] (linalg.norm (- (array (list a))
@@ -99,10 +99,11 @@
 ;; helper functions
 
 (defn line-direction-vec [point-pair]
-  (apply sub point-pair))
+  (negative (apply sub point-pair)))
 
-(defn angle-bisector [cubic-bezier]
-  (let [[point (dict (zip [:p1 :p2 :p3 :p4] cubic-bezier))]]
+(defn angle-bisector [segment]
+  "Return mean of lines connecting first and second and third and forth control point respectively"
+  (let [[point (dict (zip [:p1 :p2 :p3 :p4] segment))]]
     (/ (array [ (+ (get point :p1) (get point :p4))
                 (+ (get point :p2) (get point :p3)) ]) 2)))
 
@@ -113,6 +114,26 @@
 (defn bezier-curvature2 [segment1 segment2]
   (/ (dot (apply sub (take 2 segment1)) (apply sub (drop 2 segment2)))
      (* (linalg.norm segment1) (linalg.norm segment2))))
+
+
+;;
+;; other
+;;
+(defn choose-pts [coll xs ys]
+  "Return specified items from collection"
+  (get coll (.tolist (.transpose (array (list (it.product xs ys)))))))
+
+(defn connect-end-points [path]
+  "Return both end points of each segment, thus defining a list of lines"
+  (list (map (fn [part] (list (slice part 0 4 3))) path)))
+
+(defn get-end-points [path]
+  "Return first control point of each segment"
+  (choose-pts path (range 0 (len path)) [(int 0)]))
+
+(defn cut-end-points [path]
+  "Return second and third control point of each segment"
+  (choose-pts path (range 0 (len path)) [1 2]))
 
 ;;
 ;; path manipulation routines
@@ -155,7 +176,7 @@
 
 (defn get-merged-convex [path]
   (let [[convex-segments (reduce add (list (map (fn [x] (try-merge (list (second x))))
-                                                (filter first (groupby path convex?)))) [])]]
+                                                (filter first (it.groupby path convex?)))) [])]]
     (if (< (dist (first (first convex-segments))
                  (last (last convex-segments)))
            0.5)
@@ -165,34 +186,33 @@
     ))
 
 ;;
-;; merge convex segments if they don't meet on an edge
+;;
 
-(defn merge-and-filter [parts]
- ; (print parts)
-  (if (< (len parts) 2)
-    parts
-    (list (map (fn [x y] (do ;; (if (< (dist (last x) (first y)) 0.5) (print "no edge?"(no-edge? x y) "\ndot " (bezier-curvature2 x y)))
-                          (if (and (< (dist (last x) (first y)) 0.5)
-                                   (no-edge? x y)
-                                   (< (bezier-curvature2 x y) 0))
-                            (merge-beziers [x y])
-                            [])))
-               parts
-               (+ (list (rest parts)) [(first parts)])))))
+(defn merge-and-filter [segments]
+  "Merge consecutive convex segments if the transition from one to the other is smooth"
+  (if (< (len segments) 2)
+    segments
+    (list (map (fn [x y] (if (and (< (dist (last x) (first y)) 0.5)
+                                  (no-edge? x y)
+                                  (< (bezier-curvature2 x y) 0))
+                           (merge-beziers [x y])
+                           []))
+               segments
+               (+ (list (rest segments)) [(first segments)])))))
 
-(defn merge-and-filter2 [segs]
-  (let [[grouped (groupby path (fn [x] (< (bezier-curvature2 x x)
+(defn merge-and-filter2 [segments]
+  "Merge convex segments if the transition from one to the other is smooth"
+  (let [[grouped (it.groupby segments (fn [x] (< (bezier-curvature2 x x)
                                           0)))]
         [parts (list (map (fn [x] (list (second x))) (remove first grouped)))]
         [curved (list (map (fn [x] (list (second x))) (filter first grouped)))]]
-    (if (= (len parts) 1)
+    (if (= (len segments) 1)
       parts
-      (list (map (fn [x y] (do ;(if (< (dist (last x) (first y)) 0.5) (print "no edge?"(no-edge? x y) "dot " (bezier-curvature2 x y)))
-                            (if (and (< (dist (last x) (first y)) 0.5)
-                                     (no-edge? x y)
-                                     (< (bezier-curvature2 x y) 0))
-                              (merge-beziers [x y])
-                              [])))
+      (list (map (fn [x y] (if (and (< (dist (last x) (first y)) 0.5)
+                                    (no-edge? x y)
+                                    (< (bezier-curvature2 x y) 0))
+                             (merge-beziers [x y])
+                             []))
                  parts
                  (+ (list (rest parts)) [(first parts)]))))))
 
@@ -209,19 +229,16 @@
 
 (defn merge-consecutive [a b]
   (list (map (fn [x] (try-merge2 (list (second x))))
-             (filter first (groupby path convex?)))))
+             (filter first (it.groupby path convex?)))))
 
 
 (defn get-merged-convex2 [path]
   (let [[convex-segments (list (map list (filter convex? path)))]]
-;    (print (merge-and-filter convex-segments))
- ;   (print (array (remove empty? (merge-and-filter convex-segments))))
-    (remove empty? (merge-and-filter convex-segments))
-
-    ))
+    (list (remove empty? (merge-and-filter convex-segments)))))
 
 
                                 ;array ( [[  5.42957003,  28.13219065],[  8.19975053,  16.10221783],[  2.30515485,  40.4036828 ],[-28.54816996,  31.52851723],[-27.50015975,  21.76728318],[-44.97547529,  35.59957164]])
+
 
 
 ;; TODO: put here: merge, split etc
@@ -247,4 +264,4 @@
       (apply add new-segments))))
 
 (defn split-segments-to [cut-off-attribute t path]
-  (array (reduce add (list (map (fn [x] (split-segment-to cut-off-attribute t x)) path)))))
+  (array (list (reduce add (list (map (fn [x] (split-segment-to cut-off-attribute t x)) path))))))
