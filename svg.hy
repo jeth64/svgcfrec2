@@ -3,7 +3,7 @@
         [sys [exit]]
         [xml.etree.ElementTree [parse SubElement]]
         [itertools [imap]]
-        [re [finditer split match]]
+        [re]
         [operator [add sub]]
         [warnings [warn]]
         [tools [*]])
@@ -19,9 +19,9 @@
 
 
 (defn ptlist2matrix [points offset slicing absolute?]
-; "Interpretation of the command point list
+  "Interpretation of the command point list"
 ;   'slicing' determines the number of points for a single command
-;   'offset' determines the initial brush position "
+;   'offset' determines the initial brush position
   (if (empty? (list points))
     []
     (let [[pts (partition slicing slicing points)]
@@ -40,10 +40,10 @@
 (defn single-object-path2matrix [str] ;; archto command missing
   "For each command part calculates 4 points representing it"
   (setv points [])
-  (for [it (finditer "([MmCcSsLl])([^A-DF-Za-df-z]+)" str)]
+  (for [it (re.finditer "([MmCcSsLl])([^A-DF-Za-df-z]+)" str)]
     (let [[cmd (.group it (int 1))]
           [nr-str (-> (.group it (int 2)) (.replace  "-" " -") (.replace  "e -" "e-") (.strip))]
-          [numbers (map float (remove empty? (split " |," nr-str)))]
+          [numbers (map float (remove empty? (re.split " |," nr-str)))]
           [pts (partition 2 2 numbers)]
           [offset (if (empty? points) (first pts) (last (last points)))]
           [new-points (cond [(= (.upper cmd) "M")
@@ -77,7 +77,7 @@
 (defn path2matrix [str]
   "Devides path string at 'moveto' commands (M/m) and returns a matrix for each substring"
   (list (imap (fn [m] (single-object-path2matrix (.group m (int 0))))
-              (finditer "([Mm][^Mm]+)" str))))
+              (re.finditer "([Mm][^Mm]+)" str))))
 
 (defn get-paths [node namespace]
   "Returns all paths which are subelements of given node as matrices"

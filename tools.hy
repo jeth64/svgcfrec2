@@ -1,5 +1,6 @@
-(import [numpy [around]]
-        [itertools [groupby]])
+(import [numpy [diag roll amin sort]]
+        [itertools [groupby]]
+        [operator [add]])
 
 
 (defn last [coll]
