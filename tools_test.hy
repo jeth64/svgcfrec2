@@ -35,3 +35,10 @@
 (defn test_partition-by []
   (assert (= (partition-by (fn [x y] (not (= (inc x) y))) [1 2 3 5 6 8 9])
              [[1 2 3] [5 6] [8 9]])))
+
+(defn test_get-tracedists []
+  (assert (all (= (get-tracedists [4 1 2 3])
+                  (amin [[[0 4 5 7] [6 0 1 3] [5 9 0 2] [3 7 8 0]]
+                         [[0 6 5 3] [4 0 9 7] [5 1 0 8] [7 3 2 0]]] 0))))
+  (assert (all (= (get-tracedists [4 1 2 3])
+                  [[0 4 5 3] [4 0 1 3] [5 1 0 2] [3 3 2 0]]))))
