@@ -121,5 +121,10 @@
   (.update attribs {"points" (.join " " (map (fn [x] (.join "," (map str x))) vertices))})
   (SubElement parent "ns0:polygon" attribs))
 
+(defn add-text [parent attribs point text]
+  (.update attribs (zip ["x" "y"] (map str point)))
+  (setv el (SubElement parent "ns0:text" attribs))
+  (setv el.text text))
+
 (defn svg? [root]
   (= (.join "" (drop (- (len root.tag) 3) root.tag)) "svg"))
