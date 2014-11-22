@@ -31,6 +31,15 @@
           [True
            (for [x coll] (yield x))])))
 
+
+(defn replace [coll keys]
+  "Replaces given keys by items in collection"
+  (map (fn [x] (get coll x)) keys))
+
+(defn replace2d [coll key-matrix]
+  "Replaces keys in matrix by items in collection"
+  (map (fn [key] (list (replace coll key))) key-matrix))
+
 (defn group-by [labels coll] ;; not like clojure
   (dict (list (map (fn [x] [(first x) (list (map second (second x)))])
                    (groupby (sorted (zip labels coll) None first) first)))))
@@ -47,6 +56,7 @@
 
 (defn make-set [pairings]
   (set (list (map (fn [x] (tuple (sort x))) pairings))))
+
 
 ;;
 ;; distance functions
