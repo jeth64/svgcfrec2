@@ -14,20 +14,12 @@
 (defn prepare [path]
   (split-segments-to "pathlength" 3.0 path))
 
-(defn get-simple-curvature [nodes]
-  "Returns [0-2-curve 1-3-curve ... (n-3)-(n-3)-curve (n-2)-0-curve (n-1)-1-curve"
-  (list (map (fn [x y z] (cross (- x y) (- x z)))
-             nodes
-             (roll nodes -1)
-             (roll nodes -2))))
 
-(defn get-curvature [curves bounds] ;; only one way -> problem?
-  (let [[gap (dec (abs (apply sub bounds)))]
-        [start (min bounds)]]
-    (assert (> gap 0))
-    (reduce add (take gap (drop start curves)))))
-
-
+(defn get-curvature [nodes e]
+  (let [[edge-dir (apply sub (replace nodes e))]
+        [path-dir (apply sub (replace nodes (, (first e) (% (inc (first e))
+                                                            (len nodes)))))]]
+    (cross path-dir edge-dir)))
 
 ;;main
 (for [infile testfiles]
@@ -52,18 +44,13 @@
                         (< tf (/ trace-dists dists)))]
               [ind-edges (make-set (transpose (nonzero graph)))]
 
-              [curves (get-simple-curvature nodes)]
+              [find-edges (filter (fn [e] (pos? (get-curvature nodes e)))
+                                  ind-edges)]
 
-
-              [find-edges (filter (fn [pair] (neg? (get-curvature curves pair))) ind-edges)]
-              [edges (map (fn [pair] [(get nodes (first pair))
-                                      (get nodes (second pair))])
-                            find-edges)]]
+              [edges (replace2d nodes find-edges)]]
           (add-path root {"fill" "none" "stroke" "yellow" "stroke-width" "0.3"} new-path)
           (for [point end-points] (add-circle root {"fill" "blue" "r" "0.2"} point))
           (for [point mid-points] (add-circle root {"fill" "green" "r" "0.2"} point))
           (for [line edges] (add-line root {"fill" "none" "stroke" "red" "stroke-width" "0.1"}
                                       line))))
       (.write tree outfile)))
-
-;; -> 'curvature' constraint doesnt achieve goal of eliminating concave edges and eliminates valid edges(see test4)
