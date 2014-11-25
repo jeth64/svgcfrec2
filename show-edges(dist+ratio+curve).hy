@@ -15,11 +15,9 @@
   (split-segments-to "pathlength" 3.0 path))
 
 
-(defn get-curvature [nodes e]
-  (let [[edge-dir (apply sub (replace nodes e))]
-        [path-dir (apply sub (replace nodes (, (first e) (% (inc (first e))
-                                                            (len nodes)))))]]
-    (cross path-dir edge-dir)))
+(defn get-curvature [nodes node-dirs e]
+  (cross (get node-dirs (first e))
+         (apply sub (replace nodes e))))
 
 ;;main
 (for [infile testfiles]
@@ -35,6 +33,8 @@
               [mid-points (cut-end-points new-path)]
 
               [nodes (list (map first new-path))]
+              [node-dirs (list (map (fn [segment] (apply sub (slice segment 0 2)))
+                                    new-path))]
 
               [td 4.0]
               [tf 1.3]
@@ -44,9 +44,8 @@
                         (< tf (/ trace-dists dists)))]
               [ind-edges (make-set (transpose (nonzero graph)))]
 
-              [find-edges (filter (fn [e] (pos? (get-curvature nodes e)))
+              [find-edges (filter (fn [e] (pos? (get-curvature nodes node-dirs e)))
                                   ind-edges)]
-
               [edges (replace2d nodes find-edges)]]
           (add-path root {"fill" "none" "stroke" "yellow" "stroke-width" "0.3"} new-path)
           (for [point end-points] (add-circle root {"fill" "blue" "r" "0.2"} point))
