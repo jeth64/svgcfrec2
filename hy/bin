@@ -1,0 +1,489 @@
+(do (setv matches (list-comp (zipmap [:cmd :nrs] (.groups it))
+                              [it (finditer "([MmCcSsLl])([^A-DF-Za-df-z]+)" str)]))
+    (loop [[points []]
+           [i 0]]
+          (if (< i (len commands))
+            (let [[nr-str (-> (get matches :nrs) (.replace  "-" " -")
+                              (.replace  "e -" "e-") (.strip))]
+                  [numbers (map float (remove empty? (split " |," nr-str)))]
+                  [pts (partition 2 2 numbers)]
+                  [offset (last (last points))]]
+              (cond [(= (.upper (get matches :cmd)) "M")
+                     (recur (.extend points (lines2beziers (ptlist2matrix (rest pts) (first pts)
+                                                                          1 (.isupper cmd))))
+                            (first pts) (inc i))]
+                    [(= (.upper (get matches :cmd)) "L")
+                     (recur (.extend points (lines2beziers (ptlist2matrix pts offset
+                                                                          1 (.isupper cmd))))
+                            offset (inc 1))]
+                    [(= (.upper (get matches :cmd)) "C")
+                     (recur
+                                              (ptlist2matrix pts offset (int 3) (.isupper cmd)))]
+                    [(= (.upper (get matches :cmd)) "Z")
+                     (recur (lines2beziers [[offset (first (first points))]]))]
+                    [True (raise (Exception "Unknown path command"))])
+
+              )
+            points)
+          ))
+
+
+
+          (let [
+           [cmd (.group it (int 1))]
+           [nr-str (-> (.group it (int 2)) (.replace  "-" " -") (.replace  "e -" "e-") (.strip))]
+           [numbers (map float (remove empty? (split " |," nr-str)))]
+           [pts (partition 2 2 numbers)]
+           [new-points (cond [(= (.upper cmd) "M")
+                              (do (setv offset (first pts))
+                                  (lines2beziers (ptlist2matrix (rest pts) offset 1 (.isupper cmd))))]
+                             [(= (.upper cmd) "L") (lines2beziers
+                                                    (ptlist2matrix pts offset 1 (.isupper cmd)))]
+                             [(= (.upper cmd) "H") (lines2beziers
+                                                    (ptlist2matrix (zip numbers (repeat (second offset)))
+                                                                   offset 1 (.isupper cmd)))]
+                             [(= (.upper cmd) "V") (lines2beziers
+                                                    (ptlist2matrix (zip (repeat (first offset)) numbers)
+                                                                   offset 1 (.isupper cmd)))]
+                             [(= (.upper cmd) "C") (do (print "c") (print offset)
+                                                       (ptlist2matrix pts offset (int 3) (.isupper cmd)))]
+                             [(= (.upper cmd) "S") (add-first-ctrl-pts
+                                                    points (ptlist2matrix pts offset 2 (.isupper cmd)))]
+                             [(= (.upper cmd) "Q") (elevate-bezier (ptlist2matrix pts offset 2 (.isupper cmd)))]
+                             [(= (.upper cmd) "T") (elevate-bezier
+                                                    (add-first-ctrl-pts
+                                                     points (ptlist2matrix pts offset 1 (.isupper cmd))))]
+                             [(= (.upper cmd) "Z") (lines2beziers [[offset (first (first points))]])]
+                             [True (raise (Exception "Unknown path command"))])]]
+       (unless (empty? new-points)
+         (setv offset (last (last new-points)))
+         (.extend points new-points)))
+
+
+                                ;     (catch [e Exception] (print "exception") ;;(warn (.join "" ["Error while interpreting path string part '" (.join "" (.groups it)) "' - this part will be ignored\n" (.args e)]))
+                                ;     )
+
+                                (defn reductions [f coll &optional init]
+  (print f coll)
+  (loop [[res [(if (none? init) (first coll) init)]]
+         [acc (if (none? init) (rest coll) coll)]]
+        (do (print acc)
+         (if (empty? acc)
+           (do (.reverse res) res)
+           (recur (cons (f (first res) (first acc)) res) (rest acc))))))
+(defn reductions [f coll]
+  (loop [[res [(first coll)]]
+         [acc (rest coll)]]
+        (if (empty? acc)
+          (do (.reverse res) res)
+          (recur (cons (f (first res) (first acc)) res) (rest acc)))))
+
+(defn find-thinnings-old [path]
+  (let [;[path (split-segments-to "pathlength" 5.0  path)]
+        [ends (map first path)]
+        [d (squareform (pdist (array ends)))]
+        [neigh-d (max (diagonal  d 1))]
+        [c-non-neigh (map (fn [row] (first (list (drop-while
+                                                  (fn [y] (not (< 1 (abs (- y (first row)))
+                                                                  (- (len row) 1))))
+                                                  row))))
+                          (argsort d))]
+        [pairings (transpose (array [(map first (argsort d)) c-non-neigh]))]
+        [pairings2 (list (filter (fn [y] (< 2 (abs (apply sub y)) (- (len (first d)) 2)))
+                                 pairings))]
+        [pairings3 (set (map (fn [x] (tuple (sort x))) pairings2))]
+        [thinnings (map (fn [x] (cross-line [(get ends (first x)) (get ends (second x))]))
+                        pairings3)]]
+    (array thinnings)))
+
+(defn get-directions-old1 [connected-comp pt-list]
+  (map
+   (fn [l] (let [[split-list (partition-by (fn [x y] (< 1 (mod-dist n x y))) l)]
+                 [n-parts (len split-list)]]
+             (cond [(= 2 (len l)) (cross-line [(get pt-list (first l)) (get pt-list (second l))])]
+                   [(= 2 (n-parts)) [(average [(get pt-list (first (first l)))
+                                               (get pt-list (last (second l)))] 0)
+                                     (average [(get pt-list (first (second l)))
+                                               (get pt-list (last (first l)))] 0)]])))
+   connected-comp))
+
+;
+; zu get-directions-old2:
+;
+
+(def edges (set [(, 13 33) (, 36 42) (, 1 48)  (, 26 28) (, 17 20) (, 4 45) (, 16 21)
+                 (, 24 31) (, 27 29) (, 25 30) (, 38 40) (, 26 29) (, 4 46) (, 9 11)
+                 (, 37 41) (, 17 19) (, 8 11)  (, 2 47)  (, 37 40) (, 3 47) (, 13 34)
+                 (, 15 21) (, 5 45)  (, 0 48)  (, 16 20) (, 3 46)]))
+
+(def ccs [[0 1 48] [2 3 4 5 45 46 47] [8 9 11] [13 33 34] [15 16 17 19 20 21] [24 31] [25 30] [26 27 28 29] [36 42] [37 38 40 41]])
+
+
+(defn spit-bipartite-graphs [ccs edges] ;;gg connectedcomp hier implementieren?
+  (let [[ems (get-edge-maps edges)]
+        [em1 (first ems)]
+        [em2 (second ems)]]
+    (map (fn [cc]
+           (let [[left []]
+                 [left-unchecked [(int (first cc))]]
+                 [right []]
+                 [right-unchecked []]]
+             (for [x cc]
+               (let [[u-coll (if (empty? left-unchecked) right-unchecked left-unchecked)]
+                     [other-u-coll (if (empty? left-unchecked) left-unchecked right-unchecked)]
+                     [coll (if (empty? left-unchecked) right left)]
+                     [node (.pop u-coll)]]
+                 (.append coll node)
+                 (for [n (+ (if (in node em2) (get em2 node) [])
+                            (if (in node em1) (get em1 node) []))]
+                   (unless (or (in n right) (in n left))
+                     (.append other-u-coll n)))))
+             [left right]))
+         ccs)))
+
+(spit-bipartite-graphs ccs edges)
+
+(defn find-thinnings [path]
+  (let [[t 4.0]
+        [path2 (split-segments-to "pathlength" 5.0  path)]
+        [nodes (map first path2)]
+        [node-dirs (get-node-dirs path)]
+
+        [n (len ends)]
+        [d (squareform (pdist (array nodes)))]
+
+        [inds (- (tile (range n) [n 1])
+                 (transpose (tile (range n) [n 1])))]
+        [edges (make-set (filter (fn [x] (< 1 (apply sub x) (dec (len ends))))
+                                 (transpose (where (< d t)))))]
+
+        [a (print edges "\n")]
+        [ind-dists (list (map (fn [x] (mod-dist n (first x) (second x))) edges))]
+        [d-edge-map (group-by ind-dists edges)]
+
+        [graph (& (< d t) (< 1 inds) (< inds (- n 1)))]
+        [cc (connected_components graph False)]
+        [cc2 (list (filter (fn [y] (> (len y) 1))
+                           (.values (group-by (second cc) (range 50))))) ]]
+        (get-directions cc2 node-dirs edges nodes)
+    ))
+;; was wenn pfad mittendrin orthogonal abgeht? falluntersch geht schief! wegen falchem split
+;; außerdem: nihts garantirt dass stücke gerade sind
+(defn get-directions-old2 [connected-comp edges pt-list]
+  (map
+   (fn [l]
+     (cond [(= 2 (len (flatten l))) (cross-line [(get pt-list (first (first l)))
+                                                 (get pt-list (first (second l)))])]
+           [True [(mean [(get pt-list (first (first l)))
+                            (get pt-list (first (second l)))] 0)
+                  (mean [(get pt-list (last (second l)))
+                            (get pt-list (last (first l)))] 0)]]))
+   (spit-bipartite-graphs connected-comp edges)))
+
+
+(defn get-tracedists [dists] ;; version 1, 4s slwer with 100000 repetitions
+  "Returns the sum of node-to-node distances along the shortest path on the hull"
+  ;; dists = [0-1 1-2 ... (n-2)-(n-1) (n-1)-0]
+  (let [[N (len dists)]
+        [tracedists-right
+         (list (map (fn [i] (roll (cons 0 (reductions add (butlast (roll dists (- i)))))
+                                  i))
+                    (range N)))]
+        [tracedists-left
+         (list (map (fn [i] (roll (list (cons 0 (reversed
+                                                 (reductions add
+                                                             (reversed (list (rest (roll dists
+                                                                                         (- i)))))))))
+                                  i))
+                    (range N)))]]
+    (amin [tracedists-right tracedists-left] 0)))
+
+(defn isec-old [lines]
+  "Intersection of lines that are infinite in the 'end' direction"
+  (try (let [[l1 (array (first (list lines)))]
+             [l2 (array (second (list lines)))]
+             [r1 (- (last l1) (first l1))]
+             [r2 (- (last l2) (first l2))]
+             [b (- (first l2) (first l1))]
+             [x (solve (transpose (array [r1 (- r2)])) b)]]
+         (if (every? pos? x)
+           (+ (first l1) (* (first x) r1))
+       (array [(float "inf") (float "inf")])))
+       (catch [e LinAlgError]
+         (array [(float "inf") (float "inf")]))))
+
+;; TODO: holes: like svg with raycasting, but before: bounding-box
+;; assumption: paths do not intersect each other
+
+(defn find-holes [paths]
+  (let [[nodes-list (map (fn [p] (list (map first p))) paths)]
+        [bounds (map (fn [nodes] (list (concat (amin nodes 0)))) nodes-list)]]))
+
+(defn find-holes [paths]; matplotlib.path.path
+  "Returns list indicating if path is describing a hole or not"
+ ; boolean array indicating if path2 contains path1
+  (setv path-in-path (array (list (map (fn [p1] (list (map (fn [p2] ( .contains_path p2 p1))
+                                                           paths)))
+                                       paths))))
+  (list (map odd? (sum path-in-path 1))))
+
+;; classify paths as holes
+
+
+
+(defn path2matrix2 [str]
+  "Devides path string at 'moveto' commands (M/m) and returns a matrix for each substring"
+  (setv mats [])
+  (setv offset [0 0])
+  (for [mtch (re.finditer "([Mm][^Mm]+)" str)]
+    (setv mat (single-object-path2matrix (.group mtch (int 0))))
+    (.append mats (if (.isupper (.group mtch (int 1)))
+                    mat
+                    (add mat offset)))
+    (setv offset (last (last (last mats)))))
+  mats)
+
+
+;; path-cutting:
+;; split path wile traversing it, connecting following vanishing segments with straight line
+
+;; bins (get-tiling-bins (vstack nodes-list) nTiles overlap)
+;; (map (fn [nodes] (path-cutting nodes bins)) nodes-list)
+
+(defn path-cutting [nodes bins] ;test
+  (let [[allocations (zip nodes (tiling nodes bins))]]
+    (map (fn [tile-ind] (filter (fn [x] (all (> 2 (abs (- tile-ind (array (second x)))))))
+                                allocations))
+         (it.product (range 0 (inc (* 2 (len (first bins)))) 2)
+                     (range 0 (inc (* 2 (len (second bins)))) 2)))))
+
+(defn simplify-graph-rec2 [node next-node edge-map not-2-conn visited new-edges] ;test
+  (setv prev-node node)
+  (while (not (in next-node not-2-conn))
+    (setv candidates (.difference (get edge-map next-node) [prev-node]))
+    (setv prev-node next-node)
+    (setv next-node (first candidates)))
+  (.append new-edges [node next-node])
+  (when (not (get visited next-node))
+    (do
+     (.__setitem__ visited next-node True)
+     (for [n (.difference (get edge-map next-node) [prev-node])]
+       (simplify-rec next-node n edge-map not-2-conn visited new-edges))))
+  new-edges)
+
+(defn simplify-graph2 [edges] ;test
+  (setv new-edges [])
+  (setv edge-map (get-edge-map edges))
+  (setv leaves (set (filter (fn [v vs] (= 1 (len vs)))
+                              (.iteritems edge-map))))
+  (setv next-node (first (get edge-map (first leaves))))
+  (setv visited (.fromkeys edge-map False))
+  (setv isecs (set (filter (fn [v vs] (> (len vs) 2)) (.iteritems edge-map))))
+  (setv not-2-conn (.union leaves isecs))
+  (simplify-graph-rec (first leaves) next-node edge-map not-2-conn visited new-edges)
+  (print "edges" new-edges)
+  new-edges)
+
+
+(defn inner-angle [v1 v2]
+  (degrees (arccos (dot (normalize v1)
+                        (normalize v2)))))
+
+(defn get-wedge-holes-rec [hole]
+  (if (> (len hole) 3)
+    (let [[angles (list (map (fn [h1 h2 h3] (inner-angle (- h2 h1) (- h2 h3)))
+                             (roll hole 1 0) hole (roll hole -1 0)))]
+          [ind (argmax angles)]]
+      (print (array hole))
+      (print angles)
+      (if (> (get angles ind) 140)
+        (do (.pop hole ind)
+            (get-wedge-holes-rec hole))
+        []))
+    hole))
+
+(defn get-wedge-holes [holes vor] ;debug
+  (if (pos? (len holes))
+    (let [[h (list (map (fn [x] (list (replace vor.vertices (butlast x)))) holes))]]
+      (list (remove empty? (map get-wedge-holes-rec h))))
+     []))
+
+(defn merge-close-points [polygon]
+  (setv max-d 0.5)
+  (setv )
+  (setv res [])
+  (while (and (> (len res) 3) )
+    (for [i (range (len polygon))]
+      (setv cur (get polygon i))
+      (if (< (abs (- (get polygon i)
+                     (get (cycle polygon) (+ i 1)))) max-d)
+        (.pop polygon i)
+        (.pop polygon (+ i 1))
+        (.push ...))
+      )
+    (for [(, prev-pt pt next-pt) (zip (roll polygon 1 0) polygon (roll polygon -1 0))]
+      (if (> (abs (- pt prev-pt)) max-d)
+        (.append (mean prev-pt pt)))
+      (when (> (abs (- pt next-pt)) max-d)
+        (.append res pt)))))
+
+
+(roll pol -1 0)
+(def pol [[1 1] [1.2 1] [2 0] [0 0]])
+(merge-close-points [[1 1] [1.2 1] [2 0] [0 0]])
+
+
+(defn get-wedge-holes2 [holes vor] ;debug
+  (if (pos? (len holes))
+    (let [[h (list (map (fn [x] (list (replace vor.vertices (butlast x)))) holes))]]
+      (list (remove empty? (map get-wedge-holes-rec h))))
+     []))
+
+(defn merge-close-points [polygon]
+  (setv max-d 0.5)
+  (setv )
+  (setv res [])
+  (while (and (> (len res) 3) )
+    (for [i (range (len polygon))]
+      (setv cur (get polygon i))
+      (setv next (get polygon (inc i)))
+      (if (< (linalg.norm (- cur next)) max-d)
+        (.pop polygon i)
+        (.pop polygon i))
+        (.insert polygon i (/ (+ cur next) 2))
+      )
+    (for [(, prev-pt pt next-pt) (zip (roll polygon 1 0) polygon (roll polygon -1 0))]
+      (if (> (abs (- pt prev-pt)) max-d)
+        (.append (mean prev-pt pt)))
+      (when (> (abs (- pt next-pt)) max-d)
+        (.append res pt)))))
+
+
+(roll pol -1 0)
+(def pol [[1 1] [1.2 1] [2 0] [0 0]])
+(merge-close-points [[1 1] [1.2 1] [2 0] [0 0]])
+
+
+(defn get-wedge-holes2 [holes vor] ;debug
+  (if (pos? (len holes))
+    (let [[h (list (map (fn [x] (list (replace vor.vertices (butlast x)))) holes))]]
+      (list (remove empty? (map get-wedge-holes-rec h))))
+     []))
+
+
+(defn trace-skeleton [edge-map vor start second unused] ; trace line till break-rule
+  (setv prev-node start)
+  (setv curr-node second)
+  (setv dir (- (get vor.vertices second) (get vor.vertices start)))
+  (setv used (set [start]))
+  (setv candidates (list (.difference (get edge-map curr-node) used)))
+  (setv angles (list (map (fn [x] (angle-between dir (- x (get vor.vertices start))) )
+                            (replace vor.vertices candidates))))
+  (while (not (empty? candidates))
+    (when (or (> (linalg.norm (- (get vor.vertices curr-node)
+                                 (get vor.vertices start)))
+                 (linalg.norm (- (get vor.vertices (get candidates (argmin angles)))
+                                 (get vor.vertices start))))
+              (> (min angles) 70))
+      (break))
+    (setv prev-node curr-node)
+    (.add used prev-node)
+    (setv curr-node (get candidates (argmin angles)))
+    (setv candidates (list (.difference (get edge-map curr-node) used)))
+    (setv angles (list (map (fn [x] (angle-between dir (- x (get vor.vertices start))) )
+                            (replace vor.vertices candidates) ))))
+  [curr-node start])
+
+(defn trace-skeleton2 [edge-map vor start dir unused] ;; dir calculated by startpt - midpt
+  (setv curr-node start)
+  (setv oldlength 0)
+  (setv used (set [start]))
+  (setv candidates (list (.difference (get edge-map start) used)))
+  (setv angles (list (map (fn [x] (angle-between dir (- x (get vor.vertices start))) )
+                            (replace vor.vertices candidates))))
+  (while (not (empty? candidates))
+    (setv newlength (linalg.norm (- (get vor.vertices (get candidates (argmin angles)))
+                                    (get vor.vertices start))))
+    (when (or (> oldlength newlength)
+              (> (min angles) 70))
+      (break))
+    (setv prev-node curr-node)
+    (setv oldlength newlength)
+    (.add used prev-node)
+    (setv curr-node (get candidates (argmin angles)))
+    (setv candidates (list (.difference (get edge-map curr-node) used)))
+    (setv angles (list (map (fn [x] (angle-between dir (- x (get vor.vertices start))) )
+                            (replace vor.vertices candidates) ))))
+
+  [curr-node start])
+
+(defn simplify-graph-rec [node next-node edge-map not-2-conn visited new-edges] ;; use .intersects_path of matplotlib-library
+  (setv prev-node node)
+  (while (not (in next-node not-2-conn))
+    (setv candidates (.difference (get edge-map next-node) [prev-node]))
+    (setv prev-node next-node)
+    (setv next-node (first candidates)))
+  (.append new-edges [node next-node])
+  (when (not (get visited next-node))
+    (do
+     (.__setitem__ visited next-node True)
+     (for [n (.difference (get edge-map next-node) [prev-node])]
+       (simplify-graph-rec next-node n edge-map not-2-conn visited new-edges))))
+  new-edges)
+
+(defn simplify-graph [edges]
+  (if (> (len edges) 0)
+    (let [[new-edges []]
+          [edge-map (get-edge-map edges)]
+          [leaves (get-graph-leaves edge-map)]
+          [next-node (first (get edge-map (first leaves)))]
+          [visited (.fromkeys (dict []) (.iterkeys edge-map) False)]
+          [isecs (get-graph-isecs edge-map)]
+          [not-2-conn (.union leaves isecs)]]
+      (simplify-graph-rec2 (first leaves) next-node edge-map not-2-conn visited new-edges)
+      new-edges)
+    edges))
+
+(defn simplify-graph-rec [node next-node edge-map not-2-conn visited new-edges] ;; use .intersects_path of matplotlib-library
+  (setv prev-node node)
+  (while (not (in next-node not-2-conn))
+    (setv candidates (.difference (get edge-map next-node) [prev-node]))
+    (setv prev-node next-node)
+    (setv next-node (first candidates)))
+  (.append new-edges [node next-node])
+  (when (not (get visited next-node))
+    (do
+     (.__setitem__ visited next-node True)
+     (for [n (.difference (get edge-map next-node) [prev-node])]
+       (simplify-graph-rec next-node n edge-map not-2-conn visited new-edges))))
+  new-edges)
+
+(defn simplify-graph [edges]
+  (if (> (len edges) 0)
+    (let [[new-edges []]
+          [edge-map (get-edge-map edges)]
+          [leaves (get-graph-leaves edge-map)]
+          [next-node (first (get edge-map (first leaves)))]
+          [visited (.fromkeys (dict []) (.iterkeys edge-map) False)]
+          [isecs (get-graph-isecs edge-map)]
+          [not-2-conn (.union leaves isecs)]]
+      (simplify-graph-rec (first leaves) next-node edge-map not-2-conn visited new-edges)
+      new-edges)
+    edges))
+
+(defn fit-bezier [pts]
+ ;; scipy.misc.comb
+  (let [[lengths (list (reductions add (map (fn [x y] (np.linalg.norm (- x y)))
+                                            (butlast ptlist) (rest ptlist)) 0.0))]
+        [ts (list )]]
+    (if (< (len pts) 4)
+      (let [[X (np.array (list (map (fn [t]
+                                      (list-comp [i (range 3)]
+                                                 (* (comb 2 i) (** t i) (** (- 1 t) (- 2 i)) )))
+                                    (map (fn [x] (/ x (last lengths))) lengths))))]]
+        (elevate-bezier (np.dot (np.linalg.inv (np.dot X.T X )) (np.dot X.T pts))))
+      (let [[X (np.array (list (map (fn [t]
+                                      (list-comp [i (range 4)]
+                                                 (* (comb 3 i) (** t i) (** (- 1 t) (- 3 i)) )))
+                                    (map (fn [x] (/ x (last lengths))) lengths))))]]
+        (np.dot (np.linalg.inv (np.dot X.T X )) (np.dot X.T pts))))))

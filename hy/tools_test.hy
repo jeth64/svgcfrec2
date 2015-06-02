@@ -32,6 +32,13 @@
   (assert (= (list-comp x [x (concat [1 2 3] (array [4 5]) {"sechs" 6} (set [7]))])
              [1 2 3 4 5 (, "sechs" 6) 7])))
 
+(defn test_case []
+  (assert (= 1 (case "a" "b" 2 "a" 1 "c" 3 6)))
+  (assert (= 2 (case "b" "b" 2 "a" 1 "c" 3 6)))
+  (assert (= 6 (case "t" "b" 2 "a" 1 "c" 3 6)))
+  (assert (= None (case "t" "b" 2 "a" 1 "c" 3 6))))
+
+
 (defn test_partition-by []
   (assert (= (partition-by (fn [x y] (not (= (inc x) y))) [1 2 3 5 6 8 9])
              [[1 2 3] [5 6] [8 9]])))

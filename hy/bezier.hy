@@ -52,9 +52,6 @@
              0 (range (inc i)))))
 
 
-(defn elevate-degree [p1 p2 p3] ;; delete?
-  [p1 (/ (+ p1 p2 p2) 3) (/ (+ p2 p2 p3) 3) p3])
-
 (defn elevate-bezier [control-points]
   "Elevates quadratic bezier curve to cubic"
   (let [[pts (array (list control-points))]]
@@ -247,7 +244,9 @@
 ;;   'cut-off-attribute' can be
 ;;   - 'distance' : t is maximum distance between endpoints
 ;;   - 'pathlength' : t is maximum sum of point-to-point distances
-;;   - 'curvature'y : t is maximum fraction of pathlength/distance "
+;;   - 'curvature' : t is maximum fraction of pathlength/distance
+;;   - 'mid-dist' : t is distance of point halfway from start to  end point
+;;                  from evaluated point on curve for t=0.5"
 
 (defn split-segment-to [cut-off-attribute t segment];;test
   (if (< (cond [(= cut-off-attribute "distance")
@@ -256,7 +255,10 @@
                 (reduce add (list (map dist (butlast segment) (rest segment))))]
                [(= cut-off-attribute "curvature")
                 (/ (reduce add (list (map dist (butlast segment) (rest segment))))
-                   (dist (first segment) (last segment)))])
+                   (dist (first segment) (last segment)))]
+               [(= cut-off-attribute "mid-dist")
+                (dist (/ (+ (first segment) (last segment)) 2)
+                      (eval-cubics [0.5] segment))])
          t)
     [segment]
     (let [[segments (de-casteljau-split 0.5 segment)]
@@ -265,3 +267,21 @@
 
 (defn split-segments-to [cut-off-attribute t path]
   (array (list (reduce add (list (map (fn [x] (split-segment-to cut-off-attribute t x)) path))))))
+
+(defn split-segment-to2 [cut-off-attribute t1 t2 segment ts pts]
+  (when (empty? ts)
+    (setv ts [0 1])
+    (setv pts [(first segment) (last segment)]))
+  (let [[pt (eval-cubics (mean ts) segment)]]
+    (if (and (< (dist (first pts) (last pts)) t1)
+             (< (dist (mean [(first pts) (last pts)] 0) pt) t2)
+             t)
+      pts
+      (reduce add [(split-segment-to2 cut-off-attribute segment [(first ts) (mean ts)]
+                                      [(first pts) pt])
+                   (split-segment-to2 cut-off-attribute segment [(mean ts) (last ts)]
+                                      [pt (last pts)])]))))
+
+(defn split-segments-to2 [cut-off-attribute t1 t2 path]
+  (array (list (reduce add (list (map (fn [x] (split-segment-to2 cut-off-attribute t1 t2 x [] []))
+                                      path))))))

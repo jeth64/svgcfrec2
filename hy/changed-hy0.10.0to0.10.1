@@ -1,0 +1,9 @@
+
+- hy2py commandlinetool (documented)
+- butlast function added, calls islice -> always call list with butlast (not documented)
+
+differences python - hy
+- map calls imap instead of map -> probably conflict
+- rest calls islice
+- assert can't be called with string to specify error
+- str not working in emacs but in terminal, workaround: call .__str__ instead
