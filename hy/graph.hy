@@ -520,6 +520,7 @@ new-edges
                             isecs))]
         [dists (list (map (fn [x] (list (map (fn [y] (np.linalg.norm (- y (np.mean x 0)))) x)))
                           isecpts))]
+        [a (print "d" dists)]
         [weights1 (list (map np.mean dists))] ;; außerdem: max, min, median
         [inner-angles (list (map (fn [edges]
                                    (let [[angles (list (map (fn [e1 e2]
@@ -577,6 +578,7 @@ new-edges
                             isecs))]
         [dists (list (map (fn [x] (list (map (fn [y] (linalg.norm (- y (mean x 0)))) x)))
                           isecpts))]
+        [a (print "d" dists)]
         [weights1 (list (map mean dists))] ;; außerdem: max, min, median
         [inner-angles (list (map (fn [edges]
                                    (let [[angles (list (map (fn [e1 e2]

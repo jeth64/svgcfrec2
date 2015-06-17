@@ -4,6 +4,7 @@ from optparse               import OptionParser, TitledHelpFormatter
 from time                   import time, asctime
 from os.path                import splitext
 from scipy.sparse.csgraph   import connected_components
+from xml.etree.ElementTree  import tostring
 from operator import add
 
 # own modules
@@ -12,16 +13,6 @@ from svg import *
 from discrete import *
 from voronoi import *
 
-
-def convertFromSVG(svgData, filename): #TODO:Test
-   from cairo   import ImageSurface, Context, FORMAT_ARGB32
-   from rsvg    import Handle
-   img = ImageSurface(FORMAT_ARGB32, 640,480)
-   ctx = Context(img)
-   handle = Handle(None, str(svgData))
-   handle.render_cairo(ctx)
-   img.write_to_png(filename)
-   return filename
 
 def findCuneiforms(infile, options):
    if options.verbose: print "\nInput: ", infile,"\n"
@@ -55,31 +46,51 @@ def findCuneiforms(infile, options):
       deleteElement(root,inlayer)
       if options.verbose: print " Done.\n"
 
+   if options.removepaths:
+      if options.verbose: print "Delete paths used for recognition..."
+      if options.layerID is None:
+         deletePaths(ns, root)
+      else: deletePaths(ns, inlayer)
+      if options.verbose: print " Done.\n"
+
    if  options.clean and fileExtension is not ".svg":
       if options.verbose: print "Delete created input svg..."
       call(["rm", filename])
       if options.verbose: print " Done.\n"
 
-
    return tree
+
+colors = ["red", "magenta", "cyan", "green" ]
 
 def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
    pathGroups = getPaths(tree, inlayer, namespace, options.unclean)
-
    if options.group:
-      pathGroups = groupPaths(list(chain(pathGroups)))
-   
+      pathGroups = groupPaths(list(chain(*pathGroups)))
+
+   i=0
    for paths in pathGroups:
-      matrices, mplpaths = zip(*paths) # should unzip
-      compoundShape = Path.make_compound_path(*mplpaths) # for point testing, test if exact path is used or vertices as polygons
-      
-      vertices = np.vstack(map(lambda m: discretize(m, options.discrete, 3.0), matrices))
+      matrices, mplpaths = zip(*paths) # unzip
+      vertexLists = map(lambda m: discretize(m, options.discrete, 3.0), matrices)
 
       for p in matrices:
-         addPath(namespace, outlayer, p, {"fill":"none", "stroke": "red", "stroke-width": "0.3"} )
+         
+         addPath(namespace, outlayer, p, {"fill":"none", "stroke": colors[i%len(colors)], "stroke-width": "0.3"} )
+         for mat in p:
+            addCircle(namespace, outlayer, mat[0,:], {"fill": "cyan", "r": "0.4"} )
+      i = i+1
+      
+      for v in np.vstack(vertexLists):
+         addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
 
-      #for v in vertices:
-         #addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
+      vD, skel = skeleton(vertexLists, mplpaths)
+      newSkel = simplifySkeleton(skel, vD.vertices, mplpaths)
+
+      for e in vD.ridge_vertices:
+         if not e[0] < 0 or e[1] < 0: 
+            addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
+      for e in newSkel:
+         if not e[0] < 0 or e[1] < 0: 
+            addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
       
    return outlayer # stub
 
@@ -87,7 +98,7 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
 def groupPaths(paths): # divide problem in var.hy
    p1InP2 = np.array(map(lambda p1: map(lambda p2: p1[1].contains_path(p2[1]), paths), paths))
    connComp = connected_components(p1InP2, False)
-   return groupbykeys(connComp, paths)
+   return groupbyKeys(connComp[1], paths)
    
 
 if __name__ == '__main__':
@@ -119,6 +130,7 @@ if __name__ == '__main__':
       parser.add_option ('-s', '--strokecolor', metavar="COLOR", action='store', default="blue", help='stroke-color of paths', dest="strokecolor")
 
       parser.add_option ('-r', '--remove', action='store_true', default=False, help='Remove input layer from document')
+      parser.add_option ('-R', '--removepaths', action='store_true', default=False, help='Remove paths used for recognition from document')
       parser.add_option ('-c', '--clean', action='store_true', default=False, help='Remove all created temporary files from disk')
 
       (options, args) = parser.parse_args()
@@ -134,7 +146,7 @@ if __name__ == '__main__':
 
       tree = findCuneiforms(args[0], options)
 
-      if options.verbose: print "Writing result to: ", options.outputfile, "\n"
+      if options.verbose: print "\nWriting result to: ", options.outputfile, "\n"
       tree.write(options.outputfile)
 
       if options.verbose: print asctime()

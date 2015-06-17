@@ -15,7 +15,7 @@
         [itertools :as it])
 
 (def testfiles
-  (list (map (fn [x] (.join "" ["testfiles_whole/test" (.__str__ x) ".svg"]))
+  (list (map (fn [x] (.join "" ["testfiles/test" (.__str__ x) ".svg"]))
              (reversed (list (range 2 3 ))))))
 
 (defn prepare [path]

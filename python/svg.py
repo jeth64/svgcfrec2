@@ -31,6 +31,16 @@ def deleteElement(root, element):
    root.remove(element)
 
 """
+Delete paths from tree
+"""
+def deletePaths(namespace, layer):
+   tag = (namespace + "path") if (namespace is not None) else "path"
+   for element in layer.iter(tag):
+      
+      print element
+      layer.remove(element)
+
+"""
 Return list of n lists of mi kijx4x2 matrices representing n shapes (= path objects),
 where mi the number of contours (= splines) a shape i consists of
 and kij the number of curves a spline ij consists of
@@ -248,7 +258,7 @@ Add line to element tree
 """
 def addLine(namespace, parent, line, attributes):
    tag = (namespace +"line") if (namespace is not None) else "line"
-   attributes.update(izip(["x1", "y1", "x2", "y2"], imap(str, line.flatten)))
+   attributes.update(izip(["x1", "y1", "x2", "y2"], imap(str, np.array(line).flatten())))
    return SubElement(parent, tag, attributes)
 
 """
@@ -259,3 +269,15 @@ def addCircle(namespace, parent, center, attributes):
    attributes.update(izip(["cx", "cy"], imap(str, center)))
    return SubElement(parent, tag, attributes)
 
+"""
+Write SVG data to png file
+"""
+def writeAsPNG(root, filename):
+   from cairo   import ImageSurface, Context, FORMAT_ARGB32
+   from rsvg    import Handle
+   img = ImageSurface(FORMAT_ARGB32, 640,480)
+   ctx = Context(img)
+   handle = Handle(None, tostring(root))
+   handle.render_cairo(ctx)
+   img.write_to_png(filename)
+   return filename
