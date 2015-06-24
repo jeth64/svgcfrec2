@@ -25,7 +25,7 @@ def dist(x,y):
    return np.linalg.norm(x-y)
 
 
-   
-
+def copy(listOfLists):
+   return map(list, listOfLists)
 
    

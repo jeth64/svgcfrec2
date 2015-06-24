@@ -6,15 +6,19 @@ from os.path                import splitext
 from scipy.sparse.csgraph   import connected_components
 from xml.etree.ElementTree  import tostring
 from operator import add
+import warnings
+from math import ceil, floor
 
 # own modules
 from bitmaptrace import traceBitmap
 from svg import *
 from discrete import *
 from voronoi import *
+from geometry import *
 
 
 def findCuneiforms(infile, options):
+   
    if options.verbose: print "\nInput: ", infile,"\n"
    fileBaseName, fileExtension = splitext(infile)
 
@@ -49,8 +53,8 @@ def findCuneiforms(infile, options):
    if options.removepaths:
       if options.verbose: print "Delete paths used for recognition..."
       if options.layerID is None:
-         deletePaths(ns, root)
-      else: deletePaths(ns, inlayer)
+         deletePaths(tree, ns, root)
+      else: deletePaths(tree, ns, inlayer)
       if options.verbose: print " Done.\n"
 
    if  options.clean and fileExtension is not ".svg":
@@ -72,25 +76,58 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       matrices, mplpaths = zip(*paths) # unzip
       vertexLists = map(lambda m: discretize(m, options.discrete, 3.0), matrices)
 
-      for p in matrices:
-         
-         addPath(namespace, outlayer, p, {"fill":"none", "stroke": colors[i%len(colors)], "stroke-width": "0.3"} )
-         for mat in p:
-            addCircle(namespace, outlayer, mat[0,:], {"fill": "cyan", "r": "0.4"} )
+      if True:
+         for p in matrices:
+            addPath(namespace, outlayer, p, {"fill":"none", "stroke": colors[i%len(colors)], "stroke-width": "0.3"} )
+
       i = i+1
-      
-      for v in np.vstack(vertexLists):
-         addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
+
+      if False:
+         for p in matrices:      
+            for mat in p:
+               addCircle(namespace, outlayer, mat[0,:], {"fill": "cyan", "r": "0.4"} )
+
+      if False:
+         for v in np.vstack(vertexLists):
+            addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
 
       vD, skel = skeleton(vertexLists, mplpaths)
+      
+      if False: 
+         for e in vD.ridge_vertices:
+            if not e[0] < 0 or e[1] < 0: 
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
+      if False:
+         for e in skel:
+            if not e[0] < 0 or e[1] < 0: 
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
+               
       newSkel = simplifySkeleton(skel, vD.vertices, mplpaths)
+      
+      if True:
+         for e in newSkel:
+            if not e[0] < 0 or e[1] < 0: 
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
 
-      for e in vD.ridge_vertices:
-         if not e[0] < 0 or e[1] < 0: 
-            addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
-      for e in newSkel:
-         if not e[0] < 0 or e[1] < 0: 
-            addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
+      cycles, cycleHints = getCycles(newSkel, vD, 10)
+      
+      if True:
+         for c in cycles:
+            poly = vD.vertices[c,:]
+            addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "magenta", "stroke-width": "0.3"})
+      if False: 
+         for e in cycleHints:
+            addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
+
+      # ws1 = map(lambda c: triangleSimilarity(c, "area"), cycles)
+      # ws2 = map(lambda c: triangleSimilarity(c, "fourier", 5, True), cycles)
+      #print "area:", ws1
+      #print "fourier:", ws2
+      if False:
+         for c,w in zip(cycles,ws):
+            if w < 1:
+               poly = vD.vertices[c,:]
+               addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "red", "stroke-width": "0.3"})
       
    return outlayer # stub
 
@@ -144,7 +181,9 @@ if __name__ == '__main__':
          print "No input file given"
          exit(0)
 
-      tree = findCuneiforms(args[0], options)
+      with warnings.catch_warnings(): # to suppress visible deprecation warning of np.rank
+         warnings.simplefilter("ignore") 
+         tree = findCuneiforms(args[0], options)
 
       if options.verbose: print "\nWriting result to: ", options.outputfile, "\n"
       tree.write(options.outputfile)
