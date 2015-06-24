@@ -33,12 +33,18 @@ def deleteElement(root, element):
 """
 Delete paths from tree
 """
-def deletePaths(namespace, layer):
+def deletePaths(tree, namespace, layer):
+   parentMap = getParentMap(tree)
    tag = (namespace + "path") if (namespace is not None) else "path"
    for element in layer.iter(tag):
-      
-      print element
-      layer.remove(element)
+      parent = parentMap[element]
+      parent.remove(element)
+
+"""
+Get parent map for specified tree
+"""
+def getParentMap(tree):
+   return {c:p for p in tree.iter() for c in p}
 
 """
 Return list of n lists of mi kijx4x2 matrices representing n shapes (= path objects),
@@ -47,7 +53,7 @@ and kij the number of curves a spline ij consists of
 """
 def getPaths(tree, node, namespace, isUnclean = False): # TODO: implement unclean
    pathGroups = []
-   parentMap = {c:p for p in tree.iter() for c in p}
+   parentMap = getParentMap(tree)
    tag = (namespace + "path") if (namespace is not None) else "path"
    for path in node.iter(tag):
       transform = getTransform(parentMap, path)
@@ -57,6 +63,9 @@ def getPaths(tree, node, namespace, isUnclean = False): # TODO: implement unclea
       pathGroups.append(zip(mats, newPaths))
    return pathGroups
 
+"""
+Get transform to be applied on node
+"""
 def getTransform(parentMap, node): # test, speed up by caching transform for node
    n = node
    transform = Affine2D()
@@ -92,16 +101,16 @@ def getTransform(parentMap, node): # test, speed up by caching transform for nod
 """
 Devides path string at 'moveto' commands (M/m) and returns a matrix for each substring
 """
-def pathstr2mplpaths(pathstr):
-   mats = []
+def pathstr2mplpaths(pathstr): # TODO: check
    paths = []
    offset = np.array([0,0])
    for match in finditer("([Mm])[^Mm]+", pathstr):
       shift = np.array([0,0]) if match.group(1).isupper() else offset
       mplpath = splinestr2mplpath(match.group(0), shift)
       if len(mplpath) > 0:
+         # print mplpath.vertices
          paths.append(mplpath)
-         offset = paths[-1].vertices[-1,:]
+         offset = paths[-1].vertices[0,:]
    return paths
    
 
@@ -140,11 +149,15 @@ def splinestr2mplpath(pathstr, initialOffset):
    offset = initialOffset
    vertices = []
    codes = []
+   print "shift", initialOffset
+   print "new"
    for it in finditer('([A-DF-Za-df-z])([^A-DF-Za-df-z]+)',pathstr):
       cmd = it.group(1)
+      print cmd
       nrstr = it.group(2).replace("-"," -").replace("e -", "e-").strip()
       numbers = imap(float, list(ifilter(lambda x: len(x) > 0, split(" |,", nrstr))))
-      code, newVertices = translateToMplCmd(cmd, numbers, vertices)
+      print nrstr
+      code, newVertices = translateToMplCmd(cmd, numbers, vertices, initialOffset)
       if len(newVertices) > 0:
          vertices.extend(newVertices)
          codes.extend([code]*len(newVertices))
@@ -162,16 +175,17 @@ mplCode = { "M": 1, "L": 2, "Q": 3, "C": 4, "Z": 79}
 Translate command-points pair to one suitable for matplotlib path
 'predecing' is expected to be list of preceding spline point list
 """
-def translateToMplCmd(cmd, numbers, preceding):
-   offset = preceding[-1] if len(preceding) > 0 else np.array([0, 0])
+def translateToMplCmd(cmd, numbers, preceding, initialOffset):
+   # print cmd
+   offset = preceding[-1] if len(preceding) > 0 else initialOffset
    if cmd.upper() == "M":
-      points = imap(np.array, partition(numbers,2))
+      points = map(np.array, partition(numbers,2))
       code = mplCode["M"]
-      vertices = list(points) if cmd.isupper() else makeAbsolute(points, offset, 1)
+      vertices = np.array(points) if cmd.isupper() else makeAbsolute(points, offset, 1)
    elif cmd.upper() == "L":
-      points = imap(np.array, partition(numbers,2))
+      points = map(np.array, partition(numbers,2))
       code = mplCode["L"]
-      vertices = list(points) if cmd.isupper() else makeAbsolute(points, offset, 1)
+      vertices = np.array(points) if cmd.isupper() else makeAbsolute(points, offset, 1)
    elif cmd.upper() == "H":
       xs = numbers if cmd.isupper() else reductions(add, numbers, offset[0])[1:]
       code = mplCode["L"]
@@ -181,22 +195,22 @@ def translateToMplCmd(cmd, numbers, preceding):
       code = mplCode["L"]
       vertices = zipwith(np.array, repeat(offset[0]), ys)
    elif cmd.upper() == "Q":
-      points = imap(np.array, partition(numbers,2))
+      points = map(np.array, partition(numbers,2))
       code = mplCode["Q"]
-      vertices = list(points) if cmd.isupper() else makeAbsolute(points, offset, 2)
+      vertices = np.array(points) if cmd.isupper() else makeAbsolute(points, offset, 2)
    elif cmd.upper() == "T":
-      points = imap(np.array, partition(numbers,2))
+      points = map(np.array, partition(numbers,2))
       code = mplCode["Q"]
-      vertices = list(points) if cmd.isupper() else makeAbsolute(points, offset, 1)
+      vertices = np.array(points) if cmd.isupper() else makeAbsolute(points, offset, 1)
       vertices = addFirstControlforSmooth(vertices, preceding, 1)
    elif cmd.upper() == "C":
-      points = imap(np.array, partition(numbers,2))
+      points = map(np.array, partition(numbers,2))
       code = mplCode["C"]
-      vertices =  list(points) if cmd.isupper() else makeAbsolute(points, offset, 3)
+      vertices = np.array(points) if cmd.isupper() else makeAbsolute(points, offset, 3)
    elif cmd.upper() == "S":
-      points = imap(np.array, partition(numbers,2))
+      points = map(np.array, partition(numbers,2))
       code = mplCode["C"]
-      vertices = list(points) if cmd.isupper() else makeAbsolute(points, offset, 2)
+      vertices = np.array(points) if cmd.isupper() else makeAbsolute(points, offset, 2)
       vertices = addFirstControlforSmooth(vertices, preceding, 2)
    elif cmd.upper() == "Z":
       code = mplCode["Z"]
@@ -228,15 +242,11 @@ def makeAbsolute(points, offset, step):
 """
 Determine path string for cubic Bezier spline
 """
-def matrix2path(path):
-   p = np.around(path,decimals=3)
-   anker = p[0,0,:]
-   pathString = "M{0[0]},{0[1]}".format(anker)
-   for i in range(len(p)):
-      for j in range(1,4):
-         pathString = pathString + (" c" if (j == 1) else " ")  \
-                  + "{0[0]},{0[1]}".format(p[i,j,:]-p[i,0,:])
-   return pathString
+def matrix2path(matrix):
+   ptstrMatrix = map(lambda part: map(lambda p: ",".join([str(x) for x in p]), part) ,np.around(matrix, 3))
+   M = "M" + ptstrMatrix[0][0]
+   Cs = " ".join(map(lambda part:  "C" + " ".join(part[1:]), ptstrMatrix))
+   return M+" "+Cs
 
 """
 Add group to element tree 
@@ -270,12 +280,20 @@ def addCircle(namespace, parent, center, attributes):
    return SubElement(parent, tag, attributes)
 
 """
+Add polygon to element tree 
+"""
+def addPolygon(namespace, parent, vertices, attributes): 
+   tag = (namespace +"polygon") if (namespace is not None) else "polygon"
+   attributes["points"] = " ".join(map(lambda x: ",".join(map(str, x)), vertices))
+   return SubElement(parent, tag, attributes)
+  
+"""
 Write SVG data to png file
 """
 def writeAsPNG(root, filename):
    from cairo   import ImageSurface, Context, FORMAT_ARGB32
    from rsvg    import Handle
-   img = ImageSurface(FORMAT_ARGB32, 640,480)
+   img = ImageSurface(FORMAT_ARGB32, float(root.attrib["width"]),float(root.attrib["height"])) #test
    ctx = Context(img)
    handle = Handle(None, tostring(root))
    handle.render_cairo(ctx)
