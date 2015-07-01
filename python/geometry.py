@@ -12,29 +12,34 @@ def shoelace(vertices):
       down = np.dot(XY[0,:], np.roll(XY[1,:], -1, 0))
       up = np.dot(XY[0,:], np.roll(XY[1,:], 1, 0))
       # return abs(reduce(add, map(lambda xyi, xyinci: np.det(np.vstack([xyi xyinci])), vertices, )) / 2.0
-      return (down-up)/2.0
+      return abs(down-up)/2.0
    else: return 0
 
-
-"""
-Returns 3 vertices of polygon that enclose an are closest to area of original polygon
-"""
 def fitTriangle(polygon):
-   entireArea = shoelace(polygon)
-   triVerts = list(combinations(polygon, 3))
-   triEnum = list(combinations(range(len(polygon)), 3))
-   triAreas = map(shoelace, triVerts)
-   absErrs = map(lambda A:abs(entireArea-A), triAreas)
-   minInd = np.argmin(absErrs)
-   relErr = absErrs[minInd] / entireArea
-   bestInds = triEnum[minInd]
-   return {"triangle": bestInds, "rel-err": relErr, "abs-err": absErrs[minInd]}
+   res = {} 
+   if len(polygon) > 3:
+      entireArea = shoelace(polygon)
+      triVerts = list(combinations(polygon, 3))
+      triEnum = list(combinations(range(len(polygon)), 3))
+      triAreas = map(shoelace, triVerts)
+      partsList = map(lambda idx: map(lambda s, e: list(chain(takewhile(lambda y: e != y, dropwhile(lambda x: s != x, cycle(range(len(polygon))))), [e])), \
+                                                   idx, np.roll(idx, -1)), triEnum)
+      absErrs = map(lambda parts: reduce(add, map(lambda part: shoelace(polygon[part,:]), parts)), partsList)
+      minInd = np.argmin(absErrs)
+      relErr = absErrs[minInd] / (entireArea + absErrs[minInd])
+      bestInds = triEnum[minInd]
+      res = {"triangle": bestInds, "original": polygon, "rel-err": relErr, "abs-err": absErrs[minInd]}
+   elif len(polygon) < 3:
+      res = {"triangle": None, "original": polygon, "rel-err": 1, "abs-err": np.inf}
+   else:
+      res = {"triangle": range(len(polygon)), "original": polygon, "rel-err": 0, "abs-err": 0}
+   return res
 
 """
 Calculate angle between two vectors
 """
 def angle(u, v):
-   return np.sign(np.cross(u,v))*np.arccos(np.dot(u,v)/(np.linalg.norm(u)*np.linalg.norm(v)))
+   return np.sign(np.cross(u,v))*np.arccos(np.dot(u,v) / (np.linalg.norm(u)*np.linalg.norm(v)))
    
 """
 Returns Fourier descriptor of a polygon after Zahn Roskies 72
@@ -61,7 +66,9 @@ def polygonFourier(polygon, nDescriptors, polar=True):
 
 def triangleSimilarity(polygon, method, nDescriptors=5, polar=True):
    if method == "area":
-      e = fitTriangle(polygon)["rel-err"]
+      fT = fitTriangle(polygon)
+      e = 1-fT["rel-err"]
+      t = fT["triangle"]
    elif method == "fourier":
       tri = np.array([[0, 0],[2,0],[1,-1]])
       atri,btri = polygonFourier(tri, nDescriptors, polar)
@@ -70,6 +77,7 @@ def triangleSimilarity(polygon, method, nDescriptors=5, polar=True):
       eb = np.linalg.norm(btri-b)
       print "ea", ea
       print "eb", eb
-      e = ea
+      e = 1-ea
+      t = [0, np.floor(len(polygon)/3), floor(2*len(polygon)/3)] #stub
    else: print "Unknown method for triangle similarity"
-   return e
+   return e, t

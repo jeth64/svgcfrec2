@@ -63,9 +63,6 @@ def traceBack(pred, start, connLimit):
    else: print "Warning: Tree path tracing has timed out!"
    return path
 
-def dls(weightedGraph):
-
-   return paths
 
 def dlsRec(weightedGraph, pred, stopNode, node, pathlist, curLimit, connLimit, lengthLimit):
    # side-effect on pathlist
@@ -108,7 +105,8 @@ def getCycleEdges(vertices):
 Return list of unique cycles
 """
 def repulseCycles(cycles):
-   return map(lambda x: x[0], groupbyKeys(map(lambda c: tuple(sorted(getCycleEdges(c))), cycles), cycles)) 
+   return map(lambda x: x[0], groupbyKeys(map(lambda c: tuple(sorted(getCycleEdges(c))), cycles), cycles))
+
 
 
 

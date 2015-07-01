@@ -13,7 +13,7 @@ from math import ceil, floor
 from bitmaptrace import traceBitmap
 from svg import *
 from discrete import *
-from voronoi import *
+from skeleton import *
 from geometry import *
 
 
@@ -74,7 +74,7 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
    i=0
    for paths in pathGroups:
       matrices, mplpaths = zip(*paths) # unzip
-      vertexLists = map(lambda m: discretize(m, options.discrete, 3.0), matrices)
+      vertexLists = map(lambda m: discretize(m, options.discrete, 2.0), matrices)
 
       if True:
          for p in matrices:
@@ -82,12 +82,12 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
 
       i = i+1
 
-      if False:
+      if True:
          for p in matrices:      
             for mat in p:
                addCircle(namespace, outlayer, mat[0,:], {"fill": "cyan", "r": "0.4"} )
 
-      if False:
+      if True:
          for v in np.vstack(vertexLists):
             addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
 
@@ -100,18 +100,19 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       if False:
          for e in skel:
             if not e[0] < 0 or e[1] < 0: 
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
                
       newSkel = simplifySkeleton(skel, vD.vertices, mplpaths)
       
       if True:
          for e in newSkel:
-            if not e[0] < 0 or e[1] < 0: 
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
-
-      cycles, cycleHints = getCycles(newSkel, vD, 10)
+            addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
+            
       
-      if True:
+      
+      wedgeArms, wedgeHeads, cycles, cycleHints = detectContourWedges(newSkel, vD, mplpaths)
+      
+      if False:
          for c in cycles:
             poly = vD.vertices[c,:]
             addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "magenta", "stroke-width": "0.3"})
@@ -119,15 +120,33 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
          for e in cycleHints:
             addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
 
-      # ws1 = map(lambda c: triangleSimilarity(c, "area"), cycles)
-      # ws2 = map(lambda c: triangleSimilarity(c, "fourier", 5, True), cycles)
-      #print "area:", ws1
-      #print "fourier:", ws2
+      if True:
+         for c in wedgeHeads:
+            poly = vD.vertices[c,:]
+            addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
+      
       if False:
-         for c,w in zip(cycles,ws):
-            if w < 1:
+         for a in chain(*wedgeArms):
+            for e in zip(a[:-1],a[1:]):
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "grey", "stroke-width": "0.3"})
+
+      if True:
+         for a in chain(*wedgeArms):
+            addLine(namespace, outlayer, vD.vertices[[a[0],a[-1]],:], {"fill":"none", "stroke": "orange", "stroke-width": "0.3"})
+               
+      if False:
+         for c,w in zip(cycles,ws1): # can be tried with thresholding or conflict sets (conflict worse with longer common edges)
+            #print w
+            if w < 0.2:
+            #   print "!"
                poly = vD.vertices[c,:]
                addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "red", "stroke-width": "0.3"})
+      
+      #wedgeArms = detectSolidWedges(newSkel, vD)
+
+      if True:
+         for p in set(chain(*newSkel)):
+            addLabel(namespace, outlayer, vD.vertices[p,:], str(p)+": " +str(np.around(vD.vertices[p,:],2)), {"fill":"magenta", "font-size":"0.5px", "r":"0.2"}, np.array([0.3, 0]))
       
    return outlayer # stub
 

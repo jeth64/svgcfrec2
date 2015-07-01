@@ -28,4 +28,17 @@ def dist(x,y):
 def copy(listOfLists):
    return map(list, listOfLists)
 
-   
+"""
+Returns list of best indices for items in setList, such that reduce(add, [setList[i] for i in idx]) returns list of unique items
+"""
+def resolveConflicts(setList, quality, minQuality=1): # quality between 0 and 1, 1 is best
+   sIndQ = sorted(zip(range(len(setList)), quality), None, lambda x: x[1], True)
+   idx = []
+   usedEdges = set([])
+   for i, q in sIndQ:
+      if q < minQuality: break
+      print q
+      if len(usedEdges.intersection(setList[i])) == 0:
+         idx.append(i)
+         usedEdges = usedEdges.union(setList[i])
+   return idx
