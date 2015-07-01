@@ -149,14 +149,10 @@ def splinestr2mplpath(pathstr, initialOffset):
    offset = initialOffset
    vertices = []
    codes = []
-   print "shift", initialOffset
-   print "new"
    for it in finditer('([A-DF-Za-df-z])([^A-DF-Za-df-z]+)',pathstr):
       cmd = it.group(1)
-      print cmd
       nrstr = it.group(2).replace("-"," -").replace("e -", "e-").strip()
       numbers = imap(float, list(ifilter(lambda x: len(x) > 0, split(" |,", nrstr))))
-      print nrstr
       code, newVertices = translateToMplCmd(cmd, numbers, vertices, initialOffset)
       if len(newVertices) > 0:
          vertices.extend(newVertices)
@@ -272,12 +268,40 @@ def addLine(namespace, parent, line, attributes):
    return SubElement(parent, tag, attributes)
 
 """
+Add path to element tree 
+"""
+def addPath(namespace, parent, path, attributes):
+   tag = (namespace+"path") if (namespace is not None) else "path"
+   attributes["d"] = matrix2path(path)
+   return SubElement(parent, tag, attributes)
+
+
+"""
 Add circle to element tree 
 """
 def addCircle(namespace, parent, center, attributes):
    tag = (namespace+"circle") if namespace is not None else "circle"
    attributes.update(izip(["cx", "cy"], imap(str, center)))
    return SubElement(parent, tag, attributes)
+
+
+"""
+Add text at location  
+"""
+def addText(namespace, parent, location, text, attributes):
+   tag = (namespace+"text") if namespace is not None else "text"
+   attributes.update(izip(["x", "y"], imap(str, location)))
+   el = SubElement(parent, tag, attributes)
+   el.text = text
+   return el
+
+"""
+Add text and circle at location  
+"""
+def addLabel(namespace, parent, location, text, attributes, textoffset = np.array([0.2, 0])):
+   addCircle(namespace, parent, location, attributes)
+   addText(namespace, parent, textoffset + location, text, attributes)
+   return None
 
 """
 Add polygon to element tree 
