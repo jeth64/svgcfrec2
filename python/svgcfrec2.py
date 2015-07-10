@@ -8,6 +8,8 @@ from xml.etree.ElementTree  import tostring
 from operator import add
 import warnings
 from math import ceil, floor
+from matplotlib.path import Path
+from scipy.spatial.distance import pdist, squareform
 
 # own modules
 from bitmaptrace import traceBitmap
@@ -74,12 +76,79 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
    i=0
    for paths in pathGroups:
       matrices, mplpaths = zip(*paths) # unzip
-      vertexLists = map(lambda m: discretize(m, options.discrete, 2.0), matrices)
+      
+      obj = Path.make_compound_path(*mplpaths).get_extents().get_points()
+      height = obj[1,1]-obj[0,1] # height or width?
 
+      maxHeadLength = 4*height # avoid using, oder:longest edge of simplified mal 3 oder 4
+      
+      ds = sorted(pdist(np.vstack(matrices)[:,0,:], 'euclidean'))
+      maxDist = ds[0]
+      i=1
+      while maxDist < 10**(-3):
+         maxDist = ds[i]
+         i = i+1
+      
+      if options.verbose:
+         print "Starting discretization..."
+         print "  Maximum node distance along path is", maxDist
+      t1 = time()
+      vertexLists = map(lambda m: discretize(m, options.discrete, maxDist), matrices)
+      t2 = time()
+      if options.verbose:
+         print "  Finished in", t2-t1, "seconds\n" 
+
+      if options.verbose:
+         print "Starting skeletonization..."
+      t1 = time()
+      vD, skel, validIdx = skeleton(vertexLists, mplpaths)
+      t2 = time()
+      if options.verbose:
+         print "  Finished in", t2-t1, "seconds\n"
+         
+      if options.nosimplify:   
+         newSkel = skel
+      else:
+         if options.verbose:
+            print "Starting skeleton simplification..."
+         t1 = time()
+         newSkel = simplifySkeleton(skel, vD.vertices, mplpaths)
+         t2 = time()
+         if options.verbose:
+            print "  Finished in", t2-t1, "seconds\n"
+
+      if True: #paradigm == "contour-fill":
+         
+         if options.verbose:
+            print "Detecting contour wedges..."
+         t1 = time()
+         wedgeArms1, wedgeHeads1, cycles, cycleHints, wedgeCycles = detectContourWedges(newSkel, skel, vD, mplpaths, maxHeadEdges=10,maxHeadLength=maxHeadLength)
+         t2 = time()
+         if options.verbose:
+            print "  Finished in", t2-t1, "seconds\n"
+
+         dSite2VertDists = list(chain(*map(lambda eV, eP: [np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[0]]), np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[1]])], \
+                                           np.array(vD.ridge_vertices)[validIdx], np.array(vD.ridge_points)[validIdx])))
+         minWd = np.percentile(dSite2VertDists, 75)
+         minFreeSides = 1
+         usedVerts = set(chain(chain(*wedgeCycles)))
+         usedEdges = set([])
+         if options.verbose:
+            print "Detecting solid wedges..."
+            print "  Minimum joint distance to contour is", minWd
+            print "  Minimum number of initial free edges is", minFreeSides
+         t1 = time()
+         
+         wedges = detectSolidWedges(newSkel, usedVerts, usedEdges, vD, mplpaths, minWd, minFreeSides)
+         t2 = time()
+         if options.verbose:
+            print "  Finished in", t2-t1, "seconds\n"
+        
+
+      
       if True:
          for p in matrices:
             addPath(namespace, outlayer, p, {"fill":"none", "stroke": colors[i%len(colors)], "stroke-width": "0.3"} )
-
       i = i+1
 
       if True:
@@ -90,8 +159,6 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       if True:
          for v in np.vstack(vertexLists):
             addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
-
-      vD, skel = skeleton(vertexLists, mplpaths)
       
       if False: 
          for e in vD.ridge_vertices:
@@ -101,16 +168,22 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
          for e in skel:
             if not e[0] < 0 or e[1] < 0: 
                addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
-               
-      newSkel = simplifySkeleton(skel, vD.vertices, mplpaths)
+
       
+      if False: # original skeleton
+         verts = list(chain(*map(lambda mat: mat[:,0,:], matrices)))
+         vD2, skel2, validIdx2 = skeleton(verts, mplpaths)
+         
+         for e in vD2.ridge_vertices:
+            if -1 not in e:
+               addLine(namespace, outlayer, vD2.vertices[e,:], {"fill":"none", "stroke": "green", "stroke-width": "0.3"})
+         for e in skel2:
+            addLine(namespace, outlayer, vD2.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
+            
+            
       if True:
          for e in newSkel:
             addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
-            
-      
-      
-      wedgeArms, wedgeHeads, cycles, cycleHints = detectContourWedges(newSkel, vD, mplpaths)
       
       if False:
          for c in cycles:
@@ -121,29 +194,39 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
             addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
 
       if True:
-         for c in wedgeHeads:
+         for c in wedgeHeads1:
             poly = vD.vertices[c,:]
             addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
       
       if False:
-         for a in chain(*wedgeArms):
+         for a in chain(*wedgeArms1):
             for e in zip(a[:-1],a[1:]):
                addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "grey", "stroke-width": "0.3"})
 
       if True:
-         for a in chain(*wedgeArms):
+         for a in chain(*wedgeArms1):
             addLine(namespace, outlayer, vD.vertices[[a[0],a[-1]],:], {"fill":"none", "stroke": "orange", "stroke-width": "0.3"})
                
       if False:
          for c,w in zip(cycles,ws1): # can be tried with thresholding or conflict sets (conflict worse with longer common edges)
-            #print w
             if w < 0.2:
-            #   print "!"
                poly = vD.vertices[c,:]
                addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "red", "stroke-width": "0.3"})
-      
-      #wedgeArms = detectSolidWedges(newSkel, vD)
 
+
+      if True:
+         for w in wedges:
+            print "arms"
+            for e in w.armEdges:
+               print e
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "orange", "stroke-width": "0.3"})
+            print "head"
+            for e in w.headEdges:
+               print e
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
+            for v in w.vertices:
+               addLine(namespace, outlayer, [w.deepestPoint, v], {"fill":"none", "stroke": "magenta", "stroke-width": "0.3"})
+           
       if True:
          for p in set(chain(*newSkel)):
             addLabel(namespace, outlayer, vD.vertices[p,:], str(p)+": " +str(np.around(vD.vertices[p,:],2)), {"fill":"magenta", "font-size":"0.5px", "r":"0.2"}, np.array([0.3, 0]))
@@ -180,6 +263,12 @@ if __name__ == '__main__':
 
       # Discretization
       parser.add_option ('-d', '--discrete', action='store', default="polypath", help='Discretization method')
+
+      # Skeletonization
+      parser.add_option ('-S', '--nosimplify', action='store', help='Turn off skeleton simplification')
+
+      # Detection
+      parser.add_option ('-p', '--paradigm', metavar="PARADIGM", action='store', default="contour-fill", help='paradigme for wedge detectio', dest="strokecolor")
       
       # Representation
       parser.add_option ('-w', '--strokewidth', metavar="WIDTH", action='store', default="0.5", help='stroke-width of paths', dest="strokewidth")

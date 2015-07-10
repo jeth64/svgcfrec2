@@ -3,11 +3,16 @@ from scipy.spatial import Voronoi
 from matplotlib.path import Path
 from itertools import *
 from operator import add
+from scipy.sparse.csgraph import shortest_path
+
 
 # own modules
 from tools import *
 from graph import *
 from geometry import *
+from wedge import *
+
+
 
 """
 Even-odd rule
@@ -36,7 +41,7 @@ def skeleton(vertexLists, mplpaths): # allows intersections with path
    #ridgeValidity2 = map(lambda x: x not in invalidConn, voronoiDiagram.ridge_points)
    skeletonEdges = np.array(voronoiDiagram.ridge_vertices)[ridgeValidity]
    skeletonEdges = filter(lambda e: True != (lineIntersectsPath(voronoiDiagram.vertices[e,:], mplpaths)), skeletonEdges) # effekt?
-   return voronoiDiagram, skeletonEdges
+   return voronoiDiagram, skeletonEdges, ridgeValidity
 
 
 """
@@ -102,45 +107,115 @@ def simplifySkeleton2(skeletonEdges, coordinates, mplpaths): # test!
                      curNode = cand
                      nodes.append(curNode) #new
                   edges = condSplitLine(nodes, coordinates, mplpaths)
-                  print edges
                   newEdges.extend(edges)
    return newEdges
 
-def detectContourWedges(edges, vD, paths, minTriangleSimilarity=0.7, maxHeadEdges=10, maxHeadLength=np.inf):
+"""
+Returns list of best indices for items in setList, such that reduce(add, [setList[i] for i in idx]) returns list of unique items
+"""
+def resolveWedgeConflicts(head, arms, quality, minQuality=1): # quality between 0 and 1, 1 is best, TODO
+   sIndQ = sorted(zip(range(len(head)), quality), None, lambda x: x[1], True)
+   idx = []
+   usedEdges = set([])
+   
+   for i, q in sIndQ:
+      if q < minQuality: break
+      
+      if len(usedEdges.intersection(setList[i])) == 0:
+         idx.append(i)
+         usedEdges = usedEdges.union(setList[i])
+      else:
+         print ""
+   return idx
+
+def getContourWedges(cycle, vD, edgeMap, paths, shortestPaths, minSimilarity):
+   wedges = []
+   tri = fitTriangle(vD.vertices[cycle,:])
+   similarity = 1-tri["rel-err"]
+   if similarity >= minSimilarity:
+      verts = cycle[tri["triangle"]]
+      arms1 = traceArmComplete2(edgeMap, verts[0], vD, vD.vertices[verts[0]]-vD.vertices[verts[1]], vD.vertices[verts[0]]-vD.vertices[verts[2]], paths, shortestPaths)
+      arms2 = traceArmComplete2(edgeMap, verts[1], vD, vD.vertices[verts[1]]-vD.vertices[verts[2]], vD.vertices[verts[1]]-vD.vertices[verts[0]], paths, shortestPaths)
+      arms3 = traceArmComplete2(edgeMap, verts[2], vD, vD.vertices[verts[2]]-vD.vertices[verts[0]], vD.vertices[verts[2]]-vD.vertices[verts[1]], paths, shortestPaths)
+      wedges = map(lambda arms: ContourWedge(cycle, list(arms), vD.vertices),product(arms1, arms2, arms3))
+   return wedges
+
+def detectContourWedges(edges, edges2, vD, paths, minTriangleSimilarity=0.7, maxHeadEdges=20, maxHeadLength=400):
    cycles, cycleHints = getCycles(edges, vD, maxHeadEdges, maxHeadLength)
+   N = len(vD.vertices)
+   dists = map(lambda e: np.linalg.norm(vD.vertices[e[0],:]-vD.vertices[e[1],:]), edges)
+   graph = getUndirAdjMatrix(edges, N, dists)
+   a, shortestPaths = shortest_path(graph,'auto', False, True)
+   
    if len(cycles) > 0:
+      edgeMap = getEdgeMap(edges)
+      
       sim1 = map(lambda c: triangleSimilarity(vD.vertices[c,:], "area"), cycles)
       ws1 = np.array(map(lambda x: x[0], sim1))
       verts1 = np.array(map(lambda x,c: np.array(c)[x[1],], sim1, cycles))
       #ws2 = map(lambda c: triangleSimilarity(vD.vertices[c,:], "fourier", 5, True), cycles)
       #print "area:", ws1
       #print "fourier:", ws2
+      #arms = map(lambda tri: map(lambda i: traceArmComplete(edgeMap, tri[i],vD, vD.vertices[tri[i]]-vD.vertices[tri[(i+1)%3]], vD.vertices[tri[i]]-vD.vertices[tri[(i+2)%3]], paths,shortestPaths), range(len(tri))), verts1)
+      #idx = resolveWedgeConflicts(map(getCycleEdges, cycles), arms, ws1, minTriangleSimilarity)
 
       idx = resolveConflicts(map(getCycleEdges, cycles), ws1, minTriangleSimilarity)
-      wedgeHeads = verts1[idx,:]
-      edgeMap = getEdgeMap(edges)
-      #wedgeArms = map(lambda tri: map(lambda i: traceArmGreedy(edgeMap, tri[i],vD, vD.vertices[tri[i]]-vD.vertices[tri[(i+1)%3]], vD.vertices[tri[i]]-vD.vertices[tri[(i+2)%3]], paths, 3), range(len(tri))), wedgeHeads)
-      wedgeArms = map(lambda tri: map(lambda i: traceArmGreedy(edgeMap, tri[i],vD, vD.vertices[tri[i]]-vD.vertices[tri[(i+1)%3]], vD.vertices[tri[i]]-vD.vertices[tri[(i+2)%3]], paths), range(len(tri))), wedgeHeads)
       
-      print wedgeArms
+      wedgeCycles = replace(idx, cycles)
+      wedgeHeads = verts1[idx,:]
+      
+      
+      #wedgeArms = map(lambda tri: map(lambda i: traceArmGreedy(edgeMap, tri[i],vD, vD.vertices[tri[i]]-vD.vertices[tri[(i+1)%3]], vD.vertices[tri[i]]-vD.vertices[tri[(i+2)%3]], paths, 3), range(len(tri))), wedgeHeads)
+      wedgeArms = map(lambda tri: map(lambda i: traceArmComplete(edgeMap, tri[i],vD, vD.vertices[tri[i]]-vD.vertices[tri[(i+1)%3]], vD.vertices[tri[i]]-vD.vertices[tri[(i+2)%3]], paths,shortestPaths), range(len(tri))), wedgeHeads)
+      #wedgeArms = map(lambda tri: map(lambda i: traceArmComplete2(edgeMap, tri[i],vD, vD.vertices[tri[i]]-vD.vertices[tri[(i+1)%3]], vD.vertices[tri[i]]-vD.vertices[tri[(i+2)%3]], paths,shortestPaths), range(len(tri))), wedgeHeads)
+      
    else:
       wedgeHeads = []
       wedgeArms = []
-   return wedgeArms, wedgeHeads, cycles, cycleHints
+      wedgeCycles = []
+   return wedgeArms, wedgeHeads, cycles, cycleHints, wedgeCycles
 
-def detectSolidWedges(edges, vD, maxWd = np.inf):
+def getSolidWedges(joint, vD, edgeMap, paths, shortestPaths, minWd):
+   wedges = []
+   wd = np.linalg.norm(vD.vertices[joint]-vD.points[filter(lambda v: joint in v[0], zip(vD.ridge_vertices, vD.ridge_points))[0][1][0]])
+
+   if wd >= minWd:
+      verts = list(edgeMap[joint])
+      n = len(verts)
+      armsListList = map(lambda i: traceArmComplete2(edgeMap, verts[i], vD, vD.vertices[verts[i]]-vD.vertices[verts[(i+1)%n]], vD.vertices[verts[i]]-vD.vertices[verts[(i+2)%n]], paths, shortestPaths), range(n))
+      wedges = list(chain(*map(lambda armsList: map(lambda arms: SolidWedge(joint, list(arms), vD.vertices), \
+                                                    product(*armsList)), \
+                               combinations(armsListList,3))))
+   return wedges
+
+
+def detectSolidWedges(edges, exclude, usedEdges, vD, paths, minWd = 0, minFreeSides = 1):
    edgeMap = getEdgeMap(edges)
-   joints = getNodes(edgeMap, lambda deg: deg>2)
-   #edgeTriples = map(lambda i: map(lambda v: (i, v), edgeMap[i]), isecs))]
-
-   # chooses random point as distances should be equal:
-   wd = map(lambda j: np.linalg.norm(vD.vertices[j]-vD.points[filter(lambda v: j in v[0], zip(vD.ridge_vertices, vD.ridge_points))[0][1][0]]), joints)
-   print wd
+   N = len(vD.vertices)
+   dists = map(lambda e: np.linalg.norm(vD.vertices[e[0],:]-vD.vertices[e[1],:]), edges)
+   graph = getUndirAdjMatrix(edges, N, dists)
+   a, shortestPaths = shortest_path(graph,'auto', False, True)
    
-   return wd
+   joints = set(getNodes(edgeMap, lambda deg: deg>2)).difference(exclude)
+   
+   wedges = map(lambda j: sorted(getSolidWedges(j, vD, edgeMap, paths, shortestPaths, minWd), None, lambda x: x.angleProb(), True)[0], joints)
+
+   chosenWedges = []
+   for w in sorted(wedges, None, lambda x: x.angleProb(), True):
+      print w.angleProb()
+      print w.headEdges
+      print w.armEdges
+      if len(usedEdges.intersection(w.headEdges)) <= (3-minFreeSides):
+         chosenWedges.append(w)
+         usedEdges.update(w.headEdges)
+         usedEdges.update(w.armEdges)
+
+   return chosenWedges
+
 
 """
 Allows directions between dir1 and dir2
+Returns complete path
 """
 def traceArmGreedy(edgeMap, start, vD, dir1, dir2, paths, nAllowedInvalid): #tested: good
    dirvec = np.mean([dir1,dir2],0)
@@ -159,28 +234,68 @@ def traceArmGreedy(edgeMap, start, vD, dir1, dir2, paths, nAllowedInvalid): #tes
       else: stepsSinceInvalid = 0
       oldlength = newlength
       path.append(candidates[np.argmin(angles)])
-      if stepsSinceIsec > nAllowedInvalid:
+      if stepsSinceInvalid > nAllowedInvalid:
          break
       candidates = list(edgeMap[path[-1]].difference(path))
-   return path[:-stepsSinceIsec] if stepsSinceIsec != 0 else path
-
-def traceArmCompleteRec(edgeMap, pred, start, node, pathlist, vD):
-   # side-effect on pathlist
-   for v in edgeMap[node]:
-      if v != pred[node]:
-         if lineIntersectsPath([vD.vertices[start],vD.vertices[v]],paths):
-            pathlist.append(traceBack(pred, node, connLimit))
-         else:
-            if pred[v] ==-1:
-               pred[v] = node
-               traceArmCompleteRec(edgeMap, pred, start, v, pathlist, vD)
-               pred[v] = -1
+   return path[:-stepsSinceInvalid] if stepsSinceInvalid != 0 else path
 
 
-def traceArmComplete(edgeMap, start, vD, center, paths):
-   traceArmCompleteRec(edgeMap, pred, start, node, pathlist, vD)
-   return pathlist
+"""
+Does not return complete path (apply shortes path afterwards if needed)
+"""
+def traceArmComplete(edgeMap, start, vD, dir1, dir2, paths, shortestPaths):
+   ends = [start]
+   dirvec = np.mean([dir1,dir2],0)
+   maxAngle = abs(angle(dir1,dir2))/2
+
+   nodes = np.array(edgeMap.keys())
+   angles = map(lambda x: abs(angle(vD.vertices[x,:]-vD.vertices[start,:], dirvec, np.inf)), nodes)
    
+   valid = filter(lambda x: not lineIntersectsPath([vD.vertices[x,:],vD.vertices[start,:]], paths), nodes[angles < maxAngle])
+   if len(valid) > 0:
+      lengths = map(lambda x: np.linalg.norm(vD.vertices[x,:]-vD.vertices[start,:]), valid)
+      ends.append(sorted(valid, None, lambda x: np.linalg.norm(vD.vertices[x,:]-vD.vertices[start,:]), True)[0])
+   
+   p = [start]
+   cur = start
+   while cur != ends[-1]:
+      n = shortestPaths[ends[-1], cur]
+      p.append(n)
+      cur = n
+
+   return p
+   
+"""
+Does not return complete path (apply shortes path afterwards if needed)
+"""
+def traceArmComplete2(edgeMap, start, vD, dir1, dir2, paths, shortestPaths):
+   dirvec = np.mean([dir1,dir2],0)
+   maxAngle = abs(angle(dir1,dir2))/2
+   
+   nodes = np.array(edgeMap.keys())
+   angles = map(lambda x: abs(angle(vD.vertices[x,:]-vD.vertices[start,:], dirvec, np.inf)), nodes)
+   valid = filter(lambda x: not lineIntersectsPath([vD.vertices[x,:],vD.vertices[start,:]], paths), nodes[angles < maxAngle])
+
+   ps = []
+   if len(valid) > 0:
+      sValid = sorted(valid, None, lambda x: np.linalg.norm(vD.vertices[x,:]-vD.vertices[start,:]), False)
+      
+      usedVerts = set([])
+      while len(sValid) > 0:
+         end = sValid.pop()
+         if end not in usedVerts:
+            usedVerts.add(end)
+            p = [start]
+            cur = start
+            while cur != end:
+               n = shortestPaths[end, cur]
+               p.append(n)
+               cur = n
+            usedVerts.update(p)
+            ps.append(p)
+   else: ps.append([start])
+
+   return ps
 
 """
 Returns 3 limbs of wedge skeleton, center as coordinate
