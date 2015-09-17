@@ -38,8 +38,17 @@ def fitTriangle(polygon):
 """
 Calculate angle between two vectors
 """
-def angle(u, v):
-   return np.sign(np.cross(u,v))*np.arccos(np.dot(u,v) / (np.linalg.norm(u)*np.linalg.norm(v)))
+def angle(u, v, forZeros = 0, oneDir = False):
+   normalization = np.linalg.norm(u)*np.linalg.norm(v)
+   if normalization == 0:
+      return forZeros
+   sig = np.sign(np.cross(u,v))
+   if oneDir and sig < 0:
+      alpha = 360 - np.arccos(np.dot(u,v) / normalization)
+   else:
+      alpha = sig * np.arccos(np.dot(u,v) / normalization)
+   return alpha
+   
    
 """
 Returns Fourier descriptor of a polygon after Zahn Roskies 72

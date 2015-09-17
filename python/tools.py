@@ -4,6 +4,9 @@ from itertools import *
 def first(coll):
    return coll[0]
 
+def notEmpty(coll):
+  return len(coll) > 0
+
 def partition(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks"
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
@@ -28,17 +31,12 @@ def dist(x,y):
 def copy(listOfLists):
    return map(list, listOfLists)
 
-"""
-Returns list of best indices for items in setList, such that reduce(add, [setList[i] for i in idx]) returns list of unique items
-"""
-def resolveConflicts(setList, quality, minQuality=1): # quality between 0 and 1, 1 is best
-   sIndQ = sorted(zip(range(len(setList)), quality), None, lambda x: x[1], True)
-   idx = []
-   usedEdges = set([])
-   for i, q in sIndQ:
-      if q < minQuality: break
-      print q
-      if len(usedEdges.intersection(setList[i])) == 0:
-         idx.append(i)
-         usedEdges = usedEdges.union(setList[i])
-   return idx
+def replace(idx, coll):
+   return map(lambda i: coll[i], idx)
+
+def normalize(v, forZeros = None):
+   l = np.linalg.norm(v)
+   if l == 0: return v if forZeros is None else forZeros
+   else: return v/l
+
+

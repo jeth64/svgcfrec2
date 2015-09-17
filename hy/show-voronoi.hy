@@ -15,8 +15,9 @@
         [itertools :as it])
 
 (def testfiles
-  (list (map (fn [x] (.join "" ["testfiles_whole/test" (.__str__ x) ".svg"]))
-             (reversed (list (range 4 5))))))
+  ["testfiles/wash_outline.svg" ]
+ ;; (list (map (fn [x] (.join "" ["testfiles_whole/test" (.__str__ x) ".svg"])) (reversed (list (range 4 5)))))
+  )
 
 ;; (defn prepare2 [path] (split-segments-to2 3.0 1.0 path)) ;; unsinnig
 
@@ -26,7 +27,8 @@
   (split-segments-to "pathlength" 3.0 path))
 
 (def config (dict [[:min-path-node-number 0] ;; ignore paths with few nodes
-                   [:simplify True]
+                   [:simplify False]
+                   [:skeleton True]
                    [:voronoi-cells False]
                    [:labels False]]))
 
@@ -56,26 +58,30 @@
 
         (setv (, n labels) (divide-problem mpl-paths))
 
-        (for [current-group (range n)]
+        (print labels)
+        (setv labels (zeros (, (len labels))))
+        (print labels)
+        (for [current-group [0]]
+        ;;        (for [current-group (range n)]
           (let [[cur-paths (list (replace mpl-paths (first (where (= current-group (array labels))))))]
 
                 [nodes (vstack (list (map (fn [x] x.vertices) cur-paths)))]
 
-              ;;  [a (print "Calculating Voronoi Tesselation..." )]
+                ;;  [a (print "Calculating Voronoi Tesselation..." )]
                 [vor (Voronoi nodes)]
-           ;;     [a (print "Took..." (- (time) start-time) "seconds")]
-            ;;    [a (print (len vor.ridge_vertices) "ridges in total\n")]
+                ;;     [a (print "Took..." (- (time) start-time) "seconds")]
+                ;;    [a (print (len vor.ridge_vertices) "ridges in total\n")]
 
                 ;; filter segments and merge when there is no intersections
-          ;;      [a (print "Filter and merge segments..." )]
+                ;;      [a (print "Filter and merge segments..." )]
                 [(, filtered-edges ridge-points) (filter-edges3 vor cur-paths)]
                 [ind-edges (if (:simplify config)
                              (simplify-graph filtered-edges vor cur-paths)
                              filtered-edges)]
 
-           ;;     [a (print "Took..." (- (time) start-time) "seconds")]
-            ;;    [a (print (len filtered-edges) "edges found")]
-          ;;      [a (print (len ind-edges) "edges left after simplifying\n")]
+                ;;     [a (print "Took..." (- (time) start-time) "seconds")]
+                ;;    [a (print (len filtered-edges) "edges found")]
+                ;;      [a (print (len ind-edges) "edges left after simplifying\n")]
 
                 ;; indices to coordinates
                 [edges (list (replace2d vor.vertices ind-edges))]
@@ -83,11 +89,12 @@
                                           (list (remove (fn [e] (any (= (array e) -1)))
                                                         vor.ridge_vertices))))]]
             ;;  (for [point nodes] (add-circle root {"fill" "grey" "r" "0.2"} point))
-            (print (len edges))
-            (for [line edges] (add-line root {"fill" "none" "stroke" "red" "stroke-width" "0.2"} line))
+
+            (when (:skeleton config)
+              (for [line edges] (add-line root {"fill" "none" "stroke" "blue" "stroke-width" "0.3"} line)))
             (when (:voronoi-cells config)
               (for [line all-edges]
-                (add-line root {"fill" "none" "stroke" "black" "stroke-width" "0.1"} line)))
+                (add-line root {"fill" "none" "stroke" "black" "stroke-width" "0.3"} line)))
             (when (:labels config)
               (for [(, point text) (map (fn [i c] [c (str i)])
                                         (range (len vor.vertices))

@@ -238,11 +238,27 @@ def makeAbsolute(points, offset, step):
 """
 Determine path string for cubic Bezier spline
 """
-def matrix2path(matrix):
+def cubic2path(matrix):
    ptstrMatrix = map(lambda part: map(lambda p: ",".join([str(x) for x in p]), part) ,np.around(matrix, 3))
    M = "M" + ptstrMatrix[0][0]
    Cs = " ".join(map(lambda part:  "C" + " ".join(part[1:]), ptstrMatrix))
    return M+" "+Cs
+
+"""
+Determine path string for quadratic Bezier spline
+"""
+def quadratic2path(matrix):
+   ptstrMatrix = map(lambda part: map(lambda p: ",".join([str(x) for x in p]), part) ,np.around(matrix, 3))
+   M = "M" + ptstrMatrix[0][0]
+   Qs = " ".join(map(lambda part:  "Q" + " ".join(part[1:]), ptstrMatrix))
+   return M+" "+Qs
+
+"""
+Determine path string for line group spline
+"""
+def lines2path(matrix):
+   ptstrMatrix = map(lambda part: map(lambda p: ",".join([str(x) for x in p]), part), np.around(matrix, 3))
+   return " ".join(map(lambda part:  "M " + part[0] + " L "+ part[1], ptstrMatrix))
 
 """
 Add group to element tree 
@@ -254,9 +270,9 @@ def addGroup(namespace, parent, attributes):
 """
 Add path to element tree 
 """
-def addPath(namespace, parent, path, attributes):
+def addCubicPath(namespace, parent, matrix, attributes):
    tag = (namespace+"path") if (namespace is not None) else "path"
-   attributes["d"] = matrix2path(path)
+   attributes["d"] = cubic2path(matrix)
    return SubElement(parent, tag, attributes)
 
 """
@@ -268,20 +284,27 @@ def addLine(namespace, parent, line, attributes):
    return SubElement(parent, tag, attributes)
 
 """
-Add path to element tree 
-"""
-def addPath(namespace, parent, path, attributes):
-   tag = (namespace+"path") if (namespace is not None) else "path"
-   attributes["d"] = matrix2path(path)
-   return SubElement(parent, tag, attributes)
-
-
-"""
 Add circle to element tree 
 """
 def addCircle(namespace, parent, center, attributes):
    tag = (namespace+"circle") if namespace is not None else "circle"
    attributes.update(izip(["cx", "cy"], imap(str, center)))
+   return SubElement(parent, tag, attributes)
+
+"""
+Add path consisting of non-connected lines to element tree 
+"""
+def addLinesPath(namespace, parent, matrix, attributes):
+   tag = (namespace+"path") if (namespace is not None) else "path"
+   attributes["d"] = lines2path(matrix)
+   return SubElement(parent, tag, attributes)
+
+"""
+Add path with quadratic beziers to element tree 
+"""
+def addQuadraticPath(namespace, parent, matrix, attributes):
+   tag = (namespace+"path") if (namespace is not None) else "path"
+   attributes["d"] = quadratic2path(matrix)
    return SubElement(parent, tag, attributes)
 
 

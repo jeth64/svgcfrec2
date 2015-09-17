@@ -44,14 +44,14 @@ def getUndirAdjMatrix(edges, N, weights=None):
    return csr_matrix((data, ij), (N, N))
 
 
-def traceBack(pred, start, connLimit):
+def traceBack(pred, start, connLimit = 20):
    node = start
-   path = [] #[start]
+   path = [] 
    i=0
-   while i < connLimit+1:
+   while i < connLimit+1 and i < 1000+1:
       i = i+1
       previous = pred[node]
-      if np.isfinite(previous):
+      if previous > 0: # changed from from isfinite
          path.append(int(previous))
          if previous == start:
             break
@@ -63,7 +63,9 @@ def traceBack(pred, start, connLimit):
    else: print "Warning: Tree path tracing has timed out!"
    return path
 
-
+"""
+Recursion for depth-limited search
+"""
 def dlsRec(weightedGraph, pred, stopNode, node, pathlist, curLimit, connLimit, lengthLimit):
    # side-effect on pathlist
    if curLimit > 0:
@@ -71,13 +73,14 @@ def dlsRec(weightedGraph, pred, stopNode, node, pathlist, curLimit, connLimit, l
          remainingLength = lengthLimit - weightedGraph._get_single_element(node, v)
          if not (v == pred[node] or remainingLength < 0): # do not consider node far along the path
             if stopNode == v:
-               pred[v] =  node
+               pred[v] = node
                pathlist.append(traceBack(pred, v, connLimit))
             else:
                if pred[v] ==-1:
                   pred[v] = node
                   dlsRec(weightedGraph, pred, stopNode, v, pathlist, curLimit-1, connLimit, remainingLength)
                   pred[v] = -1
+   return
 
 """
 Return lists of paths describing cycles
@@ -85,7 +88,7 @@ Return lists of paths describing cycles
 def getCycles(edges, vD, connLimit=np.inf, lengthLimit=np.inf):
    if len(edges)>0:
       N = len(vD.vertices)
-      dists = map(lambda e: np.linalg.norm(vD.vertices[e,:]), edges)
+      dists = map(lambda e: np.linalg.norm(vD.vertices[e[0],:]-vD.vertices[e[1],:]), edges)
       graph = getUndirAdjMatrix(edges, N, dists)
       dfsTree = depth_first_tree(graph, edges[0][0], False)
       cycleHints = makeSet(edges).difference(makeSet(np.transpose(dfsTree.nonzero())))

@@ -1,32 +1,23 @@
 import numpy as np
 from itertools import *
-from operator import add
+from operator import add, mul
 from geometry import angle
 
 class Wedge:
-   
-   def __init__(self, center, headEdges, arms, vertexMapping):
+
+   def __init__(self, center, headEdges, arms, vertexMapping, weight):
+      self.weight = weight # TODO:decide
       self.headEdges = set(headEdges)
+      self.arms = arms
       self.armEdges = set(chain(*map(lambda arm: map(lambda v1, v2: tuple(sorted([v1, v2])),arm[:-1],arm[1:]), arms)))      
-      self.deepestPoint = Wedge.__deepestPoint(self, arms, vertexMapping, center)
+      self.deepestPoint = center #Wedge.__deepestPoint(self, arms, vertexMapping, center)
       # order vertices clockwise
       verts = map(lambda arm: vertexMapping[arm[-1],:], arms)
       if angle(verts[0]-self.deepestPoint,verts[1]-self.deepestPoint,0,True) < angle(verts[0]-self.deepestPoint,verts[2]-self.deepestPoint, 0, True):
          self.vertices = np.array(verts)
       else:
          self.vertices = np.array(list(reversed(verts)))
-      
-      print arms
-      print "deepest point", self.deepestPoint
-      print "v",verts,angle(verts[0]-self.deepestPoint,verts[2]-self.deepestPoint, 0, True)
 
-      print "vertices", self.vertices
-      print "dirs", self.directions()
-      print "lengths", self.lengths()
-      print "angles", self.angles()
-      print "angleProb", self.angleProb()
-      print reduce(add, self.angles())
-   
    def __intersection(self, l1, l2):
       A = np.vstack((l1[1]-l1[0], l2[1]-l2[0])).T
       x = np.linalg.solve(A,(l2[1]-l1[0]).T)
@@ -54,40 +45,29 @@ class Wedge:
       return map(lambda v: np.linalg.norm(v-self.deepestPoint), self.vertices)
 
    def angles(self):
-      return np.degrees(map(lambda v1,v2: angle(v1-self.deepestPoint, v2-self.deepestPoint,0,True), self.vertices, np.roll(self.vertices,-1,0))) # -1?
+      return np.degrees(map(lambda v1,v2: angle(v1-self.deepestPoint, v2-self.deepestPoint,0,True), self.vertices, np.roll(self.vertices,-1,0))) 
 
    def angleProb(self):
-      err = reduce(add, map(lambda a: abs(120-a), self.angles()))
-      return 1- (err / (360+err)) # 0<= x<=1, aber fehlerwinkel sollten reichen
-
-   def reconstruct(self, mode = "double"):
-      if mode == "double":
-         matrix = np.array(map(lambda v1, v2: [v1, self.deepestPoint, self.deepestPoint, v2], \
-                               self.vertices, np.roll(self.vertices, -1,0)))
-      elif mode == "quad":
-         matrix = np.array(map(lambda v1, v2: elevateBezier([v1, self.deepestPoint, v2]), \
-                               self.vertices, np.roll(self.vertices, -1,0)))
+      alphas = self.angles()
+      if False: # any(imap(lambda a: a>180, alphas)): # ggf nicht noetig, soll unmoegliche wedges vermeiden
+         prob = 0
       else:
-         print "unknown reconstruction mode"
-         matrix = []
-      return matrix
+         err = reduce(add, map(lambda a: abs(120-a), alphas))
+         #prob = 1- (err / (360+err)) # 0<=x<=1, aber fehlerwinkel sollten reichen
+         prob = reduce(mul, map(lambda a: 120/(abs(120-a)+120), alphas))
+      return prob
 
 
 class ContourWedge(Wedge):
-   def __init__(self, cycle, arms, vertexMapping):
+   def __init__(self, cycle, arms, vertexMapping, weight):
       center = np.mean(map(lambda a: vertexMapping[a[0]], arms),0)
-      headEdges = map(lambda v1, v2: tuple(sorted([v1, v2])),cycle[:-1],np.roll(cycle,1))      
-      Wedge.__init__(self, center, headEdges, arms, vertexMapping)
-      
+      headEdges = map(lambda v1, v2: tuple(sorted([v1, v2])),cycle,np.roll(cycle,1))      
+      Wedge.__init__(self, center, headEdges, arms, vertexMapping, weight)
 
-      
+
 class SolidWedge(Wedge):
-   def __init__(self, joint, arms, vertexMapping):
+   def __init__(self, joint, arms, vertexMapping, weight):
       center = vertexMapping[joint]
       headEdges = map(lambda arm: tuple(sorted([joint,arm[0]])),arms)
-      Wedge.__init__(self, center, headEdges, arms, vertexMapping)
+      Wedge.__init__(self, center, headEdges, arms, vertexMapping, weight)
 
-      
-      
-   
-   

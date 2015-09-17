@@ -17,6 +17,7 @@ from svg import *
 from discrete import *
 from skeleton import *
 from geometry import *
+from detection import *
 
 
 def findCuneiforms(infile, options):
@@ -73,21 +74,34 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
    if options.group:
       pathGroups = groupPaths(list(chain(*pathGroups)))
 
-   i=0
-   for paths in pathGroups:
-      matrices, mplpaths = zip(*paths) # unzip
-      
-      obj = Path.make_compound_path(*mplpaths).get_extents().get_points()
-      height = obj[1,1]-obj[0,1] # height or width?
+   # TODO: file 6: 10885 connects wrong: very short edge with similar angle: compare within a 5deg radius? but error actually occurs because of weird skeleton edge
 
-      maxHeadLength = 4*height # avoid using, oder:longest edge of simplified mal 3 oder 4
+   minAngleProb = float(options.minAngleProb)
+   maxHeadEdges = int(options.maxHeadEdges) 
+   maxHeadLength = float(options.maxHeadLength)
+   minFreeSides = int(options.minFreeSides)
       
-      ds = sorted(pdist(np.vstack(matrices)[:,0,:], 'euclidean'))
-      maxDist = ds[0]
-      i=1
-      while maxDist < 10**(-3):
-         maxDist = ds[i]
-         i = i+1
+   groupnr=0
+   nSolids = 0
+   nContours = 0
+   for paths in pathGroups:
+      if options.verbose:
+         print "\nPart", groupnr,"\n"
+      
+      matrices, mplpaths = zip(*paths) # unzip
+
+      if options.maxDist is None:
+         ds = sorted(pdist(np.vstack(matrices)[:,0,:], 'euclidean'))
+         maxDist = ds[0]
+         j=1
+         while maxDist < 1: 
+            maxDist = ds[j]
+            j = j+1
+
+         dn = map(lambda d, idx: np.inf if abs(idx[0]-idx[1])==1 else d, pdist(np.vstack(matrices)[:,0,:], 'euclidean'), combinations(range(len(np.vstack(matrices))),2)) # almost no difference
+         print sorted(dn)[0], ds[0]
+      else: maxDist = float(options.maxDist)
+
       
       if options.verbose:
          print "Starting discretization..."
@@ -96,14 +110,17 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       vertexLists = map(lambda m: discretize(m, options.discrete, maxDist), matrices)
       t2 = time()
       if options.verbose:
+         print "  Calculated", len(np.vstack(vertexLists)), "discrete points"
          print "  Finished in", t2-t1, "seconds\n" 
 
       if options.verbose:
          print "Starting skeletonization..."
       t1 = time()
-      vD, skel, validIdx = skeleton(vertexLists, mplpaths)
+      #vD, skel, validIdx = skeleton(vertexLists, mplpaths)
+      vD, skel, validIdx = skeleton2(vertexLists, mplpaths)
       t2 = time()
       if options.verbose:
+         print "  Calculated", len(skel), "edges"
          print "  Finished in", t2-t1, "seconds\n"
          
       if options.nosimplify:   
@@ -115,59 +132,87 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
          newSkel = simplifySkeleton(skel, vD.vertices, mplpaths)
          t2 = time()
          if options.verbose:
+            print "  Reduced edges to", len(newSkel)
             print "  Finished in", t2-t1, "seconds\n"
+     
+      """
+      dSite2VertDists = list(chain(*map(lambda eV, eP: [np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[0]]), np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[1]])], np.array(vD.ridge_vertices)[validIdx], np.array(vD.ridge_points)[validIdx])))
+      site2siteDists = map(lambda eP: np.linalg.norm(vD.points[eP[0]]-vD.points[eP[1]]), np.array(vD.ridge_points)[validIdx])
+      minWd = np.percentile(dSite2VertDists, 75) # TODO: normalize wd? take 99 percentile as maximum and set above to 1? Problem: wahrschkt 1 muss nicht sicherwedge sein
 
-      if True: #paradigm == "contour-fill":
-         
-         if options.verbose:
-            print "Detecting contour wedges..."
-         t1 = time()
-         wedgeArms1, wedgeHeads1, cycles, cycleHints, wedgeCycles = detectContourWedges(newSkel, skel, vD, mplpaths, maxHeadEdges=10,maxHeadLength=maxHeadLength)
-         t2 = time()
-         if options.verbose:
-            print "  Finished in", t2-t1, "seconds\n"
+      print minWd
+      print np.percentile(dSite2VertDists, 99)
+      print np.percentile(dSite2VertDists, 1)
+      print 0.9 * (np.percentile(dSite2VertDists, 99)-np.percentile(dSite2VertDists, 1)) 
+      print map(lambda x:np.percentile(dSite2VertDists, x), range(0, 100, 10))
+      print "wd", np.percentile(dSite2VertDists, 25), np.percentile(dSite2VertDists, 50), np.percentile(dSite2VertDists, 75)
+      print map(lambda x:np.percentile(site2siteDists, x), range(0, 100, 10))
+      print "wdP", np.percentile(site2siteDists, 25), np.percentile(site2siteDists, 50), np.percentile(site2siteDists, 75)
+      """
+      # Determine detection parameters
 
-         dSite2VertDists = list(chain(*map(lambda eV, eP: [np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[0]]), np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[1]])], \
-                                           np.array(vD.ridge_vertices)[validIdx], np.array(vD.ridge_points)[validIdx])))
-         minWd = np.percentile(dSite2VertDists, 75)
-         minFreeSides = 1
-         usedVerts = set(chain(chain(*wedgeCycles)))
-         usedEdges = set([])
-         if options.verbose:
-            print "Detecting solid wedges..."
-            print "  Minimum joint distance to contour is", minWd
-            print "  Minimum number of initial free edges is", minFreeSides
-         t1 = time()
-         
-         wedges = detectSolidWedges(newSkel, usedVerts, usedEdges, vD, mplpaths, minWd, minFreeSides)
-         t2 = time()
-         if options.verbose:
-            print "  Finished in", t2-t1, "seconds\n"
+      distRangeS = []
+      if not options.noSolids:
+         site2vertDists = list(chain(*map(lambda eV, eP: [np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[0]]), np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[1]])], np.array(vD.ridge_vertices)[validIdx], np.array(vD.ridge_points)[validIdx])))
+         distRangeS = [np.percentile(site2vertDists, 1),np.percentile(site2vertDists, 99)]
+      print distRangeS
+      
+      if options.minWS is None:
+         #site2siteDists = map(lambda eP: np.linalg.norm(vD.points[eP[0]]-vD.points[eP[1]]), np.array(vD.ridge_points)[validIdx])
+         #minWS = np.percentile(site2siteDists, 15) # TODO: add percentile to detection parameters
+         minWS = 0.7
+      else:
+         minWS = float(options.minWS)
+
+      if options.minWC is None:
+         minWC = 0.7
+      else:
+         minWC = float(options.minWC)
         
 
-      
-      if True:
-         for p in matrices:
-            addPath(namespace, outlayer, p, {"fill":"none", "stroke": colors[i%len(colors)], "stroke-width": "0.3"} )
-      i = i+1
+      if options.verbose:
+         print "Starting detection..."
+         print "  Minimum wedge probability concerning angles (minAngleProb) is", minAngleProb
+         print "  Minimum weight for contour wedges (minWC) is", minWC
+         print "  Minimum weight for solid wedges (minWS) is", minWS 
+         print "  Maximum head length (maxHeadLength) is", maxHeadLength
+         print "  Maximum number of head edges (maxHeadEdges) is", maxHeadEdges
+         print "  Minimum number of free initial edges (minFreeSides) is", minFreeSides
+         
+      parameters = {"minAngleProb": minAngleProb, "noContours": options.noContours, "noSolids": options.noSolids, "maxHeadLength": maxHeadLength, "maxHeadEdges": maxHeadEdges, "minWC": minWC, "minWS": minWS, "minFreeSides": minFreeSides, "distRangeS": distRangeS}
+      t1 = time()
+      contourWedges, solidWedges, cycles, cycleHints=getWedges(newSkel, vD, mplpaths, options.strategy, parameters)
+      t2 = time()
+      if options.verbose:
+         print "\n  Selected", (len(contourWedges)+len(solidWedges)), "wedges:"
+         print "  -", len(contourWedges), "contour wedges"
+         print "  -", len(solidWedges), "solid wedges"
+         print "\n  Finished in", t2-t1, "seconds\n\n"
 
-      if True:
+      nContours = nContours + len(contourWedges)
+      nSolids = nSolids + len(solidWedges)
+      
+      if False:
+         for p in matrices:
+            addPath(namespace, outlayer, p, {"fill":"none", "stroke": colors[groupnr%len(colors)], "stroke-width": "0.3"} )
+
+      if False:
          for p in matrices:      
             for mat in p:
                addCircle(namespace, outlayer, mat[0,:], {"fill": "cyan", "r": "0.4"} )
 
       if True:
          for v in np.vstack(vertexLists):
-            addCircle(namespace, outlayer, v, {"fill": "blue", "r": "0.2"} )
+            addCircle(namespace, outlayer, v, {"fill": "black", "r": "0.4"} )
       
       if False: 
          for e in vD.ridge_vertices:
             if not e[0] < 0 or e[1] < 0: 
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.2"})
       if False:
          for e in skel:
             if not e[0] < 0 or e[1] < 0: 
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
+               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "blue", "stroke-width": "0.3"})
 
       
       if False: # original skeleton
@@ -192,45 +237,22 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       if False: 
          for e in cycleHints:
             addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
-
-      if True:
-         for c in wedgeHeads1:
-            poly = vD.vertices[c,:]
-            addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
-      
-      if False:
-         for a in chain(*wedgeArms1):
-            for e in zip(a[:-1],a[1:]):
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "grey", "stroke-width": "0.3"})
-
-      if True:
-         for a in chain(*wedgeArms1):
-            addLine(namespace, outlayer, vD.vertices[[a[0],a[-1]],:], {"fill":"none", "stroke": "orange", "stroke-width": "0.3"})
-               
-      if False:
-         for c,w in zip(cycles,ws1): # can be tried with thresholding or conflict sets (conflict worse with longer common edges)
-            if w < 0.2:
-               poly = vD.vertices[c,:]
-               addPolygon(namespace, outlayer, poly, {"fill":"none", "stroke": "red", "stroke-width": "0.3"})
-
-
-      if True:
-         for w in wedges:
-            print "arms"
-            for e in w.armEdges:
-               print e
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "orange", "stroke-width": "0.3"})
-            print "head"
-            for e in w.headEdges:
-               print e
-               addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "yellow", "stroke-width": "0.3"})
-            for v in w.vertices:
-               addLine(namespace, outlayer, [w.deepestPoint, v], {"fill":"none", "stroke": "magenta", "stroke-width": "0.3"})
            
-      if True:
+      if False:
          for p in set(chain(*newSkel)):
             addLabel(namespace, outlayer, vD.vertices[p,:], str(p)+": " +str(np.around(vD.vertices[p,:],2)), {"fill":"magenta", "font-size":"0.5px", "r":"0.2"}, np.array([0.3, 0]))
-      
+      if False:
+         for p in set(chain(*skel)):
+            addLabel(namespace, outlayer, vD.vertices[p,:], str(p)+": " +str(np.around(vD.vertices[p,:],2)), {"fill":"magenta", "font-size":"0.5px", "r":"0.2"}, np.array([0.3, 0]))
+
+      reconstruct(contourWedges, solidWedges, options, namespace, outlayer)
+
+      groupnr = groupnr+1
+
+   if options.verbose:
+      print "Total:", nSolids+nContours, "wedges"
+      print "      -", nContours, "contour wedges"
+      print "      -", nSolids, "solid wedges"
    return outlayer # stub
 
 
@@ -238,10 +260,58 @@ def groupPaths(paths): # divide problem in var.hy
    p1InP2 = np.array(map(lambda p1: map(lambda p2: p1[1].contains_path(p2[1]), paths), paths))
    connComp = connected_components(p1InP2, False)
    return groupbyKeys(connComp[1], paths)
-   
 
+def reconstruct(contourWedges, solidWedges, options, namespace, outlayer):
+   if options.svgRep == "skeleton-all": # shows all edges of skeleton
+      for w in contourWedges:
+         matrix = map(lambda e: vD.vertices[e,:], chain(w.headEdges, w.armEdges))
+         addLinesPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.contourStroke, "stroke-width": options.strokeWidth})
+      for w in solidWedges:
+         matrix = map(lambda e: vD.vertices[e,:], chain(w.headEdges, w.armEdges))
+         addLinesPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.solidStroke, "stroke-width": options.strokeWidth})
+            
+   elif options.svgRep == "skeleton": # shows only simplified edges
+      for w in contourWedges:
+         firsts = map(lambda arm: vD.vertices[arm[0],:], w.arms)
+         lasts = map(lambda arm: vD.vertices[arm[-1],:], w.arms)
+         head = map(lambda x,y: [x, y],firsts, np.roll(firsts, -1, 0))
+         arms = map(lambda x,y: [x, y],firsts, lasts)
+         matrix= np.array(list(chain(head, arms)))
+         addLinesPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.contourStroke, "stroke-width": options.strokeWidth})
+      for w in solidWedges: 
+         firsts = map(lambda arm: vD.vertices[arm[0],:], w.arms)
+         lasts = map(lambda arm: vD.vertices[arm[-1],:], w.arms)
+         head = map(lambda x: [w.deepestPoint, x], firsts)
+         arms = map(lambda x,y: [x, y], firsts, lasts)
+         matrix= np.array(list(chain(head, arms)))
+         addLinesPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.solidStroke, "stroke-width": options.strokeWidth})
+
+   elif options.svgRep == "minimal": # shows only simplified edges
+      for w in contourWedges: 
+         matrix = np.array(map(lambda x: [w.deepestPoint,x], w.vertices))
+         addLinesPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.contourStroke, "stroke-width": options.strokeWidth})
+      for w in solidWedges: 
+         matrix = np.array(map(lambda x: [w.deepestPoint,x], w.vertices))
+         addLinesPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.solidStroke, "stroke-width": options.strokeWidth})
+         
+   elif options.svgRep == "cubic":
+      for w in contourWedges: 
+         matrix = np.array(map(lambda v1, v2: [v1, w.deepestPoint, w.deepestPoint, v2], w.vertices, np.roll(w.vertices, -1,0)))
+         addCubicPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.contourStroke, "stroke-width": options.strokeWidth})
+      for w in solidWedges: 
+         matrix = np.array(map(lambda v1, v2: [v1, w.deepestPoint, w.deepestPoint, v2], w.vertices, np.roll(w.vertices, -1,0)))
+         addCubicPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.solidStroke, "stroke-width": options.strokeWidth})
+      
+   elif options.svgRep == "quadratic":
+      for w in contourWedges: 
+         matrix = np.array(map(lambda v1, v2: [v1, w.deepestPoint, v2], w.vertices, np.roll(w.vertices, -1,0)))
+         addQuadraticPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.contourStroke, "stroke-width": options.strokeWidth})
+      for w in solidWedges: 
+         matrix = np.array(map(lambda v1, v2: [v1, w.deepestPoint, v2], w.vertices, np.roll(w.vertices, -1,0)))
+         addQuadraticPath(namespace, outlayer, matrix, {"fill":"none", "stroke": options.solidStroke, "stroke-width": options.strokeWidth})
+   return outlayer
+         
 if __name__ == '__main__':
-   floatType = np.float32
 
    try:
       start_time = time()
@@ -263,27 +333,36 @@ if __name__ == '__main__':
 
       # Discretization
       parser.add_option ('-d', '--discrete', action='store', default="polypath", help='Discretization method')
+      parser.add_option ('-D', '--maxDist', action='store', default=None, help='Maximum node distance for discretization', dest="maxDist")
 
       # Skeletonization
       parser.add_option ('-S', '--nosimplify', action='store', help='Turn off skeleton simplification')
 
-      # Detection
-      parser.add_option ('-p', '--paradigm', metavar="PARADIGM", action='store', default="contour-fill", help='paradigme for wedge detectio', dest="strokecolor")
+      # Detection and Repulsion
+      parser.add_option ('-s', '--strategy', action='store', default="contour-fill", help='strategy for wedge repulsion')
+      parser.add_option ('-F', '--noSolids', action='store_true', default=False, help='determines if solid wedges are detected')
+      parser.add_option ('-C', '--noContours', action='store_true', default=False, help='determines if contour wedges are detected')
+      parser.add_option ('-x', '--minWS', action='store', default=None, help='minimum distance of a wedge center to the shape contour for solid wedges')
+      parser.add_option ('-y', '--minWC', action='store', default=None, help='minimum triangle similarity for contour wedges')
+      parser.add_option ('-z', '--minAngleProb', action='store', default="0.5", help='minimum angle probability for wedges')
+      parser.add_option ('-f', '--minFreeSides', action='store', default="1", help='minimum of free head edges for selection of solid wedges in contour-fill strategies')
+
+      # Optimization
+      parser.add_option ('-e', '--maxHeadEdges', action='store', default="10", help='maximum head edges of contour wedges')
+      parser.add_option ('-i', '--maxHeadLength', action='store', default="inf", help='maximum head length of contour wedges')
       
       # Representation
-      parser.add_option ('-w', '--strokewidth', metavar="WIDTH", action='store', default="0.5", help='stroke-width of paths', dest="strokewidth")
-      parser.add_option ('-s', '--strokecolor', metavar="COLOR", action='store', default="blue", help='stroke-color of paths', dest="strokecolor")
+      parser.add_option ('-q', '--svgRep', action='store', default="cubic", help='representation of wedge in svg file')
+      parser.add_option ('-w', '--strokeWidth', action='store', default="0.3", help='stroke-width of paths')
+      parser.add_option ('-p', '--contourStroke', action='store', default="orange", help='stroke-color of paths')
+      parser.add_option ('-P', '--solidStroke', action='store', default="magenta", help='stroke-color of paths')
 
       parser.add_option ('-r', '--remove', action='store_true', default=False, help='Remove input layer from document')
       parser.add_option ('-R', '--removepaths', action='store_true', default=False, help='Remove paths used for recognition from document')
       parser.add_option ('-c', '--clean', action='store_true', default=False, help='Remove all created temporary files from disk')
 
       (options, args) = parser.parse_args()
-
-      # gapSize = float(options.gapSize)
    
-      pathAttributes = {"fill":"none", "stroke": options.strokecolor, "stroke-width": options.strokewidth}
-
       if options.verbose: print asctime()
       if len(args) < 1:
          print "No input file given"

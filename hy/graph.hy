@@ -579,7 +579,7 @@ new-edges
         [dists (list (map (fn [x] (list (map (fn [y] (linalg.norm (- y (mean x 0)))) x)))
                           isecpts))]
         [a (print "d" dists)]
-        [weights1 (list (map mean dists))] ;; außerdem: max, min, median
+        [weights1 (list (map mean dists))] ;; außerdem: max, min, median, sollte gleich sein
         [inner-angles (list (map (fn [edges]
                                    (let [[angles (list (map (fn [e1 e2]
                                                               (let [[u (apply sub e1)]
