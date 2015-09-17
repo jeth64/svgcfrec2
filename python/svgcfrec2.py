@@ -71,8 +71,10 @@ colors = ["red", "magenta", "cyan", "green" ]
 
 def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
    pathGroups = getPaths(tree, inlayer, namespace, options.unclean)
-   if options.group:
+   if not options.nogroup:
       pathGroups = groupPaths(list(chain(*pathGroups)))
+      #if options.verbose:
+         #print "Divided into", len(pathGroups),"groups\n"
 
    # TODO: file 6: 10885 connects wrong: very short edge with similar angle: compare within a 5deg radius? but error actually occurs because of weird skeleton edge
 
@@ -85,8 +87,9 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
    nSolids = 0
    nContours = 0
    for paths in pathGroups:
-      if options.verbose:
-         print "\nPart", groupnr,"\n"
+      if options.verbose and not options.nogroup:
+         print "Part", groupnr,"\n"
+      groupnr = groupnr+1
       
       matrices, mplpaths = zip(*paths) # unzip
 
@@ -99,12 +102,13 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
             j = j+1
 
          dn = map(lambda d, idx: np.inf if abs(idx[0]-idx[1])==1 else d, pdist(np.vstack(matrices)[:,0,:], 'euclidean'), combinations(range(len(np.vstack(matrices))),2)) # almost no difference
-         print sorted(dn)[0], ds[0]
+         #print sorted(dn)[0], ds[0]
       else: maxDist = float(options.maxDist)
 
       
       if options.verbose:
          print "Starting discretization..."
+         print "  Path group consists of", len(matrices), "curves"
          print "  Maximum node distance along path is", maxDist
       t1 = time()
       vertexLists = map(lambda m: discretize(m, options.discrete, maxDist), matrices)
@@ -116,13 +120,18 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       if options.verbose:
          print "Starting skeletonization..."
       t1 = time()
-      #vD, skel, validIdx = skeleton(vertexLists, mplpaths)
-      vD, skel, validIdx = skeleton2(vertexLists, mplpaths)
+      vD, skel, validIdx = skeleton(vertexLists, mplpaths)
+      #vD, skel, validIdx = skeleton2(vertexLists, mplpaths)
       t2 = time()
       if options.verbose:
          print "  Calculated", len(skel), "edges"
          print "  Finished in", t2-t1, "seconds\n"
          
+      if len(skel)<3: 
+		  if options.verbose: 
+			  print "Not enough edges for a wedge in this group\n\n"
+		  continue 
+		  
       if options.nosimplify:   
          newSkel = skel
       else:
@@ -134,6 +143,11 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
          if options.verbose:
             print "  Reduced edges to", len(newSkel)
             print "  Finished in", t2-t1, "seconds\n"
+      
+      if len(newSkel)<3: 
+		  if options.verbose: 
+			  print "Not enough edges for a wedge in this group\n\n"
+		  continue 
      
       """
       dSite2VertDists = list(chain(*map(lambda eV, eP: [np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[0]]), np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[1]])], np.array(vD.ridge_vertices)[validIdx], np.array(vD.ridge_points)[validIdx])))
@@ -155,7 +169,7 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
       if not options.noSolids:
          site2vertDists = list(chain(*map(lambda eV, eP: [np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[0]]), np.linalg.norm(vD.points[eP[0]]-vD.vertices[eV[1]])], np.array(vD.ridge_vertices)[validIdx], np.array(vD.ridge_points)[validIdx])))
          distRangeS = [np.percentile(site2vertDists, 1),np.percentile(site2vertDists, 99)]
-      print distRangeS
+      #print distRangeS
       
       if options.minWS is None:
          #site2siteDists = map(lambda eP: np.linalg.norm(vD.points[eP[0]]-vD.points[eP[1]]), np.array(vD.ridge_points)[validIdx])
@@ -238,7 +252,7 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
          for e in cycleHints:
             addLine(namespace, outlayer, vD.vertices[e,:], {"fill":"none", "stroke": "cyan", "stroke-width": "0.3"})
            
-      if False:
+      if True:
          for p in set(chain(*newSkel)):
             addLabel(namespace, outlayer, vD.vertices[p,:], str(p)+": " +str(np.around(vD.vertices[p,:],2)), {"fill":"magenta", "font-size":"0.5px", "r":"0.2"}, np.array([0.3, 0]))
       if False:
@@ -246,8 +260,6 @@ def findCuneiformsInSVG(tree, inlayer, outlayer, namespace, options):
             addLabel(namespace, outlayer, vD.vertices[p,:], str(p)+": " +str(np.around(vD.vertices[p,:],2)), {"fill":"magenta", "font-size":"0.5px", "r":"0.2"}, np.array([0.3, 0]))
 
       reconstruct(contourWedges, solidWedges, options, namespace, outlayer)
-
-      groupnr = groupnr+1
 
    if options.verbose:
       print "Total:", nSolids+nContours, "wedges"
@@ -328,7 +340,7 @@ if __name__ == '__main__':
       # same with potrace and autotrace?
         
       # Interpretation
-      parser.add_option ('-g', '--group', action='store_true', default=False, help='Automate grouping of paths')
+      parser.add_option ('-G', '--nogroup', action='store_true', default=False, help='Automate grouping of paths')
       parser.add_option ('-u', '--unclean', action='store_true', default=False, help='Simplify paths before continuing')
 
       # Discretization
