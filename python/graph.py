@@ -109,8 +109,3 @@ Return list of unique cycles
 """
 def repulseCycles(cycles):
    return map(lambda x: x[0], groupbyKeys(map(lambda c: tuple(sorted(getCycleEdges(c))), cycles), cycles))
-
-
-
-
-

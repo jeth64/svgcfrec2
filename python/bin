@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 """
 Returns Fourier descriptor of a polygon after Persoon Fu 77
@@ -101,6 +102,53 @@ def detectSolidWedges(edges, exclude, usedEdges, vD, paths, minWd = 0, minFreeSi
    return wedgeArms, joints
          #wedgeArms1, wedgeHeads1, cycles, cycleHints, wedgeCycles = detectContourWedges(newSkel, skel, vD, mplpaths, maxHeadEdges=10,maxHeadLength=maxHeadLength)
 def detectContourWedges(edges, edges2, vD, paths, minTriangleSimilarity=0.7, maxHeadEdges=20, maxHeadLength=400):
+=======
+"""
+Limbs consisting of vertex lists, modes :double or :quad :vert :vert-quad
+limbs may not start with same vertex if modes :vert or :vert-quad are used
+"""
+def wedgeFromSkeleton(limbs, vD, center = None, mode ="double"):
+   corners = map(lambda x:x[-1],limbs)
+   startpts = map(lambda x:x[0], limbs)
+   if center is None:
+      center = np.mean(vD.vertices[startpts], 0)
+   if mode == "double":
+      matrix = np.array(map(lambda c1, c2: [vD.vertices[c1], center, center, vD.vertices[c2]], \
+                            corners, np.roll(corners, -1)))
+   elif mode == "quad":
+      matrix = np.array(map(lambda c1, c2: elevateBezier([vD.vertices[c1], center, vD.vertices[c2]]), \
+                            corners, np.roll(corners, -1)))
+   elif mode == "vert":
+      matrix = np.array(map(lambda c1, c2, s: [vD.vertices[c1], vD.vertices[s], vD.vertices[s], vD.vertices[c2]], \
+                            corners, np.roll(corners, -1), np.roll(startpts, 1)))
+   elif mode == "vert-quad":
+      matrix = np.array(map(lambda c1, c2, s: elevateBezier([vD.vertices[c1], vD.vertices[s], vD.vertices[c2]]), \
+                            corners, np.roll(corners, -1), np.roll(startpts, 1)))
+   elif mode == "mid":
+      matrix = np.array(map(lambda c1, c2, s: [vD.vertices[c1], np.mean([vD.vertices[c1], vD.vertices[s]], 0), np.mean([vD.vertices[c2], vD.vertices[s]], 0), vD.vertices[c2]], \
+                            corners, np.roll(corners -1), np.roll(startpts, 1)))
+   elif mode == "mid-cross":
+      matrix = np.array(map(lambda c1, c2, s: [vD.vertices[c1], np.mean([vD.vertices[c2], vD.vertices[s]], 0), np.mean([vD.vertices[c1], vD.vertices[s]], 0), vD.vertices[c2]], \
+                            corners, np.roll(corners, -1), np.roll(startpts, 1)))
+   else:
+      print "unknown reconstruction mode"
+      matrix = []
+   return matrix
+
+"""
+def getContourWedges(cycle, vD, edgeMap, paths, shortestPaths, minSimilarity=0, minProb=0.5):
+   wedges = []
+   tri = fitTriangle(vD.vertices[cycle,:])
+   similarity = 1-tri["rel-err"]
+   if similarity >= minSimilarity:
+      verts = np.array(cycle)[tri["triangle"],]
+      arms1 = traceArm(edgeMap, verts[0], vD, vD.vertices[verts[0]]-vD.vertices[verts[1]], vD.vertices[verts[0]]-vD.vertices[verts[2]], paths, shortestPaths)
+      arms2 = traceArm(edgeMap, verts[1], vD, vD.vertices[verts[1]]-vD.vertices[verts[2]], vD.vertices[verts[1]]-vD.vertices[verts[0]], paths, shortestPaths)
+      arms3 = traceArm(edgeMap, verts[2], vD, vD.vertices[verts[2]]-vD.vertices[verts[0]], vD.vertices[verts[2]]-vD.vertices[verts[1]], paths, shortestPaths)
+      wedges = map(lambda arms: ContourWedge(cycle, list(arms), vD.vertices, similarity),product(arms1, arms2, arms3))
+   return filter(lambda w: w.angleProb() >= minProb, wedges)
+
+def detectContourWedges(edges, vD, paths, minTriangleSimilarity=0.7, maxHeadEdges=20, maxHeadLength=400):
    cycles, cycleHints = getCycles(edges, vD, maxHeadEdges, maxHeadLength)
    N = len(vD.vertices)
    dists = map(lambda e: np.linalg.norm(vD.vertices[e[0],:]-vD.vertices[e[1],:]), edges)
@@ -290,3 +338,63 @@ dirs [array([-1.6384653 ,  2.53017835]), array([-1.6384653 ,  2.53017835]), arra
 lengths [3.0143607974339561, 3.0143607974339561, 5.347872419095288]
 angles [     0.          20474.75994448    151.72068023]
 angleProb 0.0172525499855
+
+      allWedges = imap(lambda c: sorted(getContourWedges(c, vD, edgeMap, paths, shortestPaths, minTriangleSimilarity), None, lambda x: x.angleProb(), True), cycles)
+      wedges = map(first, ifilter(notEmpty, allWedges))  # choose best of all wedges for a circle
+
+      usedHeadEdges = set([])
+      chosenWedges = []
+      for w in sorted(wedges, None, lambda x: x.angleProb()*x.probability, True):
+         if len(usedHeadEdges.intersection(w.headEdges)) == 0:
+            chosenWedges.append(w)
+            usedHeadEdges.update(w.headEdges)
+      
+   else:
+      chosenWedges = []
+   return chosenWedges, cycles, cycleHints
+
+def getSolidWedges(joint, vD, edgeMap, paths, shortestPaths, minWd = 0, minProb = 0.5):
+   wedges = []
+   wd = np.linalg.norm(vD.vertices[joint]-vD.points[filter(lambda v: joint in v[0], zip(vD.ridge_vertices, vD.ridge_points))[0][1][0]])
+   #print wd
+   if wd >= minWd:
+      #print "                       ",joint
+      verts = list(edgeMap[joint])
+      #print verts
+      n = len(verts)
+      # TODO: whaat of the following is best
+      armsListList = map(lambda i: traceArm(edgeMap, verts[i], vD, vD.vertices[verts[i]]-vD.vertices[verts[(i+1)%n]], vD.vertices[verts[i]]-vD.vertices[verts[(i+2)%n]], paths, shortestPaths,joint), range(n))
+      #armsListList = map(lambda i: traceArm(edgeMap, verts[i], vD, vD.vertices[joint]-vD.vertices[verts[(i+1)%n]], vD.vertices[joint]-vD.vertices[verts[(i+2)%n]], paths, shortestPaths,joint), range(n))
+      wedges = list(chain(*map(lambda armsList: map(lambda arms: SolidWedge(joint, list(arms), vD.vertices, wd), \
+                                                    product(*armsList)), \
+                               combinations(armsListList,3))))
+      
+   return filter(lambda w: w.angleProb() >= minProb, wedges)
+
+def detectSolidWedges(edges, exclude, usedEdges, vD, paths, minWd = 0, minFreeSides = 1):
+   edgeMap = getEdgeMap(edges)
+   N = len(vD.vertices)
+   dists = map(lambda e: np.linalg.norm(vD.vertices[e[0],:]-vD.vertices[e[1],:]), edges)
+   graph = getUndirAdjMatrix(edges, N, dists)
+   a, shortestPaths = shortest_path(graph,'auto', False, True)
+   
+   joints = set(getNodes(edgeMap, lambda deg: deg>2)).difference(exclude)
+   
+   allWedges = imap(lambda j: sorted(getSolidWedges(j, vD, edgeMap, paths, shortestPaths, minWd), None, lambda x: x.angleProb(), True), joints)
+   wedges = map(first,ifilter(notEmpty, allWedges))  # choose best of all wedges for a center
+
+   chosenWedges = []
+   for w in sorted(wedges, None, lambda x: x.angleProb(), True):
+      if len(usedEdges.intersection(w.headEdges)) <= (3-minFreeSides):
+         #print len(usedEdges.intersection(w.headEdges))
+         #print w.headEdges
+         #print w.probability
+         #print w.angleProb()
+         chosenWedges.append(w)
+         usedEdges.update(w.headEdges)
+         usedEdges.update(w.armEdges)
+
+   return chosenWedges
+"""
+
+>>>>>>> 35586edf6aa8d25894edd5cb1fdc37f4f002fa65
